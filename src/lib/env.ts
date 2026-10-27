@@ -16,7 +16,10 @@ export const isProd = process.env.NODE_ENV === "production";
 
 /** Public base URL of the app, without trailing slash. */
 export function appUrl(): string {
-  return (process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
+  const vercelHost =
+    process.env.VERCEL_ENV === "production" ? process.env.VERCEL_PROJECT_PRODUCTION_URL : process.env.VERCEL_URL;
+  const url = optionalEnv("APP_URL") ?? (vercelHost ? `https://${vercelHost}` : "http://localhost:3000");
+  return url.replace(/\/$/, "");
 }
 
 export const config = {
