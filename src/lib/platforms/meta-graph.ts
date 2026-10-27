@@ -5,7 +5,11 @@ import { fetchJson, platformFetch } from "./http";
 
 type Params = Record<string, string | number | boolean | undefined | null>;
 
-export const graphBase = () => `https://graph.facebook.com/${config.metaGraphVersion}`;
+/** Facebook Login tokens use graph.facebook.com; Instagram Login tokens use graph.instagram.com. */
+export type GraphApi = "facebook" | "instagram";
+
+export const graphBase = (api: GraphApi = "facebook") =>
+  `https://graph.${api === "instagram" ? "instagram" : "facebook"}.com/${config.metaGraphVersion}`;
 
 const AUTH_CODES = new Set([102, 190, 463, 467]);
 const RATE_CODES = new Set([4, 17, 32, 613, 80001, 80002, 80004, 80005, 80006]);
@@ -45,10 +49,17 @@ function encode(params: Params): URLSearchParams {
 }
 
 /** Graph API call. The token goes in the Authorization header, never the URL. */
-export async function graph<T>(method: "GET" | "POST" | "DELETE", path: string, token: string, params: Params = {}): Promise<T> {
-  const proof = appSecretProof(token);
+export async function graph<T>(
+  method: "GET" | "POST" | "DELETE",
+  path: string,
+  token: string,
+  params: Params = {},
+  api: GraphApi = "facebook",
+): Promise<T> {
+  // appsecret_proof is signed with the Facebook app secret, so it only applies to graph.facebook.com.
+  const proof = api === "facebook" ? appSecretProof(token) : undefined;
   const query = encode(method === "GET" ? { ...params, appsecret_proof: proof } : { appsecret_proof: proof });
-  const url = `${graphBase()}/${path.replace(/^\//, "")}${query.size ? `?${query}` : ""}`;
+  const url = `${graphBase(api)}/${path.replace(/^\//, "")}${query.size ? `?${query}` : ""}`;
   return fetchJson<T>(
     url,
     {

@@ -23,6 +23,7 @@ export async function GET() {
         auth: set("AUTH_SECRET"),
         encryption: set("ENCRYPTION_KEY"),
         meta: set("META_APP_ID", "META_APP_SECRET"),
+        instagram: set("INSTAGRAM_APP_ID", "INSTAGRAM_APP_SECRET"),
         linkedin: set("LINKEDIN_CLIENT_ID", "LINKEDIN_CLIENT_SECRET"),
         qstash: set("QSTASH_TOKEN", "QSTASH_CURRENT_SIGNING_KEY", "QSTASH_NEXT_SIGNING_KEY"),
         email: set("RESEND_API_KEY"),

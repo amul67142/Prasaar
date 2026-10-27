@@ -5,16 +5,9 @@ import { safeEqual } from "../../crypto";
 import { graph, graphPublic } from "../meta-graph";
 import type { ConnectCandidate } from "../types";
 import type { FacebookCredentials, FacebookMeta } from "../facebook";
-import type { InstagramCredentials, InstagramMeta } from "../instagram";
 
-export const META_SCOPES = [
-  "pages_show_list",
-  "pages_manage_posts",
-  "pages_read_engagement",
-  "instagram_basic",
-  "instagram_content_publish",
-  "business_management",
-];
+// Facebook Pages only. Instagram connects through Instagram Login (connect/instagram.ts).
+export const META_SCOPES = ["pages_show_list", "pages_manage_posts", "pages_read_engagement", "business_management"];
 
 const redirectUri = () => `${appUrl()}/api/connect/meta/callback`;
 
@@ -38,7 +31,6 @@ interface PageRow {
   access_token?: string;
   tasks?: string[];
   picture?: { data?: { url?: string } };
-  instagram_business_account?: { id: string; username?: string; name?: string; profile_picture_url?: string };
 }
 
 export async function metaCandidates(code: string): Promise<ConnectCandidate[]> {
@@ -64,7 +56,7 @@ export async function metaCandidates(code: string): Promise<ConnectCandidate[]> 
   let after: string | undefined;
   for (let i = 0; i < 10; i++) {
     const res = await graph<{ data: PageRow[]; paging?: { cursors?: { after?: string }; next?: string } }>("GET", "me/accounts", userToken, {
-      fields: "id,name,access_token,tasks,picture{url},instagram_business_account{id,username,name,profile_picture_url}",
+      fields: "id,name,access_token,tasks,picture{url}",
       limit: 100,
       after,
     });
@@ -91,31 +83,18 @@ export async function metaCandidates(code: string): Promise<ConnectCandidate[]> 
       unavailableReason: reason,
     };
     candidates.push(fb);
-
-    const ig = page.instagram_business_account;
-    if (ig) {
-      candidates.push({
-        platform: "instagram",
-        externalId: ig.id,
-        displayName: ig.name || ig.username || page.name,
-        username: ig.username,
-        avatar: ig.profile_picture_url,
-        credentials: { pageAccessToken: page.access_token ?? "" } satisfies InstagramCredentials,
-        meta: { igUserId: ig.id, pageId: page.id, userId: me.id, username: ig.username } satisfies InstagramMeta,
-        unavailableReason: reason,
-      });
-    }
   }
   return candidates;
 }
 
 /** Verifies and decodes a Meta `signed_request` (data deletion and deauthorize callbacks). */
 export function parseMetaSignedRequest(signedRequest: string): { user_id: string; issued_at?: number } | null {
-  const secret = optionalEnv("META_APP_SECRET");
+  // Facebook Login callbacks are signed with the app secret, Instagram Login ones with the Instagram app secret.
+  const secrets = [optionalEnv("META_APP_SECRET"), optionalEnv("INSTAGRAM_APP_SECRET")].filter(Boolean) as string[];
   const [sig, payload] = signedRequest.split(".");
-  if (!secret || !sig || !payload) return null;
-  const expected = createHmac("sha256", secret).update(payload).digest("base64url");
-  if (!safeEqual(expected, sig.replace(/=+$/, ""))) return null;
+  if (!secrets.length || !sig || !payload) return null;
+  const given = sig.replace(/=+$/, "");
+  if (!secrets.some((secret) => safeEqual(createHmac("sha256", secret).update(payload).digest("base64url"), given))) return null;
   try {
     const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { algorithm?: string; user_id?: string; issued_at?: number };
     if (data.algorithm?.toUpperCase() !== "HMAC-SHA256" || !data.user_id) return null;

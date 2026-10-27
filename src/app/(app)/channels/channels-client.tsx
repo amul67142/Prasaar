@@ -27,7 +27,7 @@ export function Flash({ error, connected }: { error?: string; connected?: string
   );
 }
 
-const oauthStart = (provider: "meta" | "linkedin" | "mastodon", instance?: string) =>
+const oauthStart = (provider: "meta" | "instagram" | "linkedin" | "mastodon", instance?: string) =>
   `/api/connect/${provider}/start${instance ? `?instance=${encodeURIComponent(instance)}` : ""}`;
 
 type FormKind = "telegram" | "bluesky" | "mastodon";
@@ -36,7 +36,8 @@ type FormKind = "telegram" | "bluesky" | "mastodon";
 function useConnect() {
   const [form, setForm] = useState<FormKind | null>(null);
   const start = (platform: Platform) => {
-    if (platform === "facebook" || platform === "instagram") window.location.href = oauthStart("meta");
+    if (platform === "facebook") window.location.href = oauthStart("meta");
+    else if (platform === "instagram") window.location.href = oauthStart("instagram");
     else if (platform === "linkedin") window.location.href = oauthStart("linkedin");
     else setForm(platform);
   };
@@ -62,7 +63,7 @@ export function ConnectButton() {
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Connect a channel</DialogTitle>
-            <DialogDescription>Facebook and Instagram connect together: log in once and pick the Pages and accounts to add.</DialogDescription>
+            <DialogDescription>Pick a platform. You&apos;ll log in there and come straight back.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-2 sm:grid-cols-2">
             {PLATFORMS.map((p) => (
@@ -261,7 +262,8 @@ export function ChannelRow({ channel: c, manage, expiresLabel }: { channel: Chan
   const [pending, start] = useTransition();
 
   const reconnectNow = () => {
-    if (c.platform === "facebook" || c.platform === "instagram") window.location.href = oauthStart("meta");
+    if (c.platform === "facebook") window.location.href = oauthStart("meta");
+    else if (c.platform === "instagram") window.location.href = oauthStart(c.meta.loginType === "facebook" ? "meta" : "instagram");
     else if (c.platform === "linkedin") window.location.href = oauthStart("linkedin");
     else if (c.platform === "mastodon") window.location.href = oauthStart("mastodon", String(c.meta.instance ?? ""));
     else setReconnect(c.platform);

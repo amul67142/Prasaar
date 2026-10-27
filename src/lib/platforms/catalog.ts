@@ -19,7 +19,7 @@ export const PLATFORM_INFO: Record<
     label: "Instagram",
     color: "#E1306C",
     connect: "oauth",
-    connectHint: "Business or Creator account linked to a Facebook Page.",
+    connectHint: "Log in with Instagram. Business or Creator accounts.",
   },
   linkedin: {
     label: "LinkedIn",

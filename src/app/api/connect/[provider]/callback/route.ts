@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { ctxOrThrow } from "@/lib/session";
 import { consumeOAuthState, createPendingConnection, upsertChannels } from "@/lib/services/channels";
+import { instagramCandidate } from "@/lib/platforms/connect/instagram";
 import { metaCandidates } from "@/lib/platforms/connect/meta";
 import { linkedinCandidates } from "@/lib/platforms/connect/linkedin";
 import { mastodonCandidate } from "@/lib/platforms/connect/mastodon";
@@ -21,16 +22,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ prov
       return redirectWithError(cancelled ? "Connection cancelled." : q.get("error_description") || "The platform didn't complete the login.");
     }
 
-    if (provider === "mastodon") {
-      await upsertChannels(ctx, [await mastodonCandidate(stateDoc, code)]);
-      return redirectTo("/channels?connected=mastodon");
+    // One account per login: add it straight away.
+    if (provider === "mastodon" || provider === "instagram") {
+      const candidate = provider === "mastodon" ? await mastodonCandidate(stateDoc, code) : await instagramCandidate(code);
+      await upsertChannels(ctx, [candidate]);
+      return redirectTo("/channels?connected=1");
     }
 
     const candidates = provider === "meta" ? await metaCandidates(code) : await linkedinCandidates(code);
     if (candidates.length === 0) {
       return redirectWithError(
         provider === "meta"
-          ? "No Facebook Pages were shared. Reconnect and select the Pages (and their Instagram accounts) to add."
+          ? "No Facebook Pages were shared. Reconnect and select the Pages to add."
           : "LinkedIn didn't return any accounts.",
       );
     }
