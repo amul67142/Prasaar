@@ -46,7 +46,7 @@ npm run build
 | `src/lib/engine.ts` | Atomic lock, publish, retry (1 / 5 / 15 min), failure alerts, safety sweep |
 | `src/lib/storage/` | `Storage` interface: Hostinger now, R2 later by config |
 | `upload-service/` | Node app for Hostinger: signed direct uploads from the browser |
-| `vercel.json` | Mumbai region; crons for sweep (every minute), token refresh, media cleanup |
+| `vercel.json` | Mumbai region; daily crons for the safety sweep, token refresh, media cleanup (Hobby plan allows only daily crons; on Pro, set the sweep back to `* * * * *`) |
 
 ## Before real users can connect
 
@@ -56,7 +56,7 @@ These are outside the code and on you:
 2. **LinkedIn app**: Sign In with LinkedIn + Share on LinkedIn now; apply for Community Management API for company pages, then set `LINKEDIN_ORG_SCOPES=1`.
 3. **Legal pages**: `/privacy`, `/terms` and `/data-deletion` are drafts. Fill the contact, grievance officer and address (`src/app/(legal)/legal-config.ts` or the `NEXT_PUBLIC_*` env vars) and get them reviewed.
 4. **Hostinger**: deploy `upload-service/` and turn off CDN image optimisation (see `upload-service/README.md`).
-5. **Vercel Pro** (per-minute cron), MongoDB Atlas in Mumbai, Upstash QStash + Redis, Resend.
+5. **Vercel** (Hobby works; Pro for a per-minute safety sweep), MongoDB Atlas in Mumbai, **Upstash QStash (required in production: it triggers each post at its time)** + Redis, Resend.
 
 ## Not in phase 1
 
