@@ -1,9 +1,16 @@
 import "server-only";
 
+export class MissingEnvError extends Error {
+  constructor(public envName: string) {
+    super(`Missing environment variable ${envName}`);
+    this.name = "MissingEnvError";
+  }
+}
+
 /** Read a required env var; throws with a clear message when missing. */
 export function requireEnv(name: string): string {
   const value = process.env[name];
-  if (!value) throw new Error(`Missing environment variable ${name}`);
+  if (!value) throw new MissingEnvError(name);
   return value;
 }
 

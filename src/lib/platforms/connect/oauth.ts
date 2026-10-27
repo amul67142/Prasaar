@@ -1,6 +1,6 @@
 import "server-only";
 import { NextResponse } from "next/server";
-import { appUrl } from "../../env";
+import { appUrl, MissingEnvError } from "../../env";
 import { isAppError } from "../../errors";
 import { PlatformError } from "../types";
 
@@ -27,6 +27,10 @@ export function handleConnectError(err: unknown) {
     return redirectWithError(err.message);
   }
   if (err instanceof PlatformError) return redirectWithError(err.message);
+  if (err instanceof MissingEnvError) {
+    console.error("[connect]", err.message);
+    return redirectWithError(`This platform isn't set up on the server yet (${err.envName} is missing). Add it in Vercel and redeploy.`);
+  }
   console.error("[connect]", err);
   return redirectWithError("Something went wrong while connecting. Please try again.");
 }
