@@ -80,7 +80,7 @@ export async function cleanupMedia() {
   let removed = 0;
   for (const m of stale) {
     try {
-      await storage().remove(m.storageKey);
+      await (await storage()).remove(m.storageKey);
       await Media.deleteOne({ _id: m._id });
       removed++;
     } catch (err) {

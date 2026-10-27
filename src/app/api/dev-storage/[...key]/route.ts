@@ -1,13 +1,10 @@
 import { Readable } from "node:stream";
 import { NextResponse, type NextRequest } from "next/server";
-import { KEY_RE, verifyUpload } from "@/lib/storage";
+import { KEY_RE, storageDriver, verifyUpload } from "@/lib/storage";
 import { readLocalFile, writeLocalFile } from "@/lib/storage/local";
 
 // Local stand-in for the Hostinger upload service + CDN. Disabled unless the local driver is in use.
-function enabled() {
-  const driver = process.env.STORAGE_DRIVER ?? (process.env.UPLOAD_BASE_URL ? "hostinger" : "local");
-  return driver === "local";
-}
+const enabled = () => storageDriver() === "local";
 
 type Params = { params: Promise<{ key: string[] }> };
 

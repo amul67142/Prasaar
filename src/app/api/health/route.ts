@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db/mongo";
 import { appUrl, optionalEnv } from "@/lib/env";
+import { storageDriver } from "@/lib/storage";
 
 // Which services are configured (yes/no only, never values) and whether the database answers.
 export async function GET() {
@@ -27,7 +28,11 @@ export async function GET() {
         linkedin: set("LINKEDIN_CLIENT_ID", "LINKEDIN_CLIENT_SECRET"),
         qstash: set("QSTASH_TOKEN", "QSTASH_CURRENT_SIGNING_KEY", "QSTASH_NEXT_SIGNING_KEY"),
         email: set("RESEND_API_KEY"),
-        uploads: set("UPLOAD_BASE_URL", "CDN_BASE_URL", "UPLOAD_SIGNING_SECRET"),
+        uploads:
+          storageDriver() === "r2"
+            ? set("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET", "R2_PUBLIC_BASE_URL")
+            : set("UPLOAD_BASE_URL", "CDN_BASE_URL", "UPLOAD_SIGNING_SECRET"),
+        storage: storageDriver(),
         cron: set("CRON_SECRET"),
       },
     },

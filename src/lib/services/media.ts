@@ -72,7 +72,7 @@ export async function createUpload(
   const doc = await Media.create({
     workspaceId: ctx.workspaceId,
     storageKey: key,
-    url: storage().publicUrl(key),
+    url: (await storage()).publicUrl(key),
     filename: input.filename.slice(0, 200) || `upload.${type.ext}`,
     mime: input.mime,
     kind: type.kind,
@@ -81,7 +81,7 @@ export async function createUpload(
     folder: (input.folder ?? "").trim().slice(0, 80),
     uploadedBy: ctx.userId,
   });
-  return { media: toMediaView(doc), upload: storage().createUpload(key, { mime: input.mime, maxBytes: input.sizeBytes }) };
+  return { media: toMediaView(doc), upload: await (await storage()).createUpload(key, { mime: input.mime, maxBytes: input.sizeBytes }) };
 }
 
 export async function completeUpload(ctx: Ctx, id: string): Promise<MediaView> {
@@ -91,7 +91,7 @@ export async function completeUpload(ctx: Ctx, id: string): Promise<MediaView> {
   if (!doc) throw notFound("Media");
   if (doc.status === "ready") return toMediaView(doc);
 
-  const info = await storage().inspect(doc.storageKey);
+  const info = await (await storage()).inspect(doc.storageKey);
   if (!info) throw new AppError("UPLOAD_MISSING", "The file didn't finish uploading. Try again.", 409);
   if (info.sizeBytes > doc.sizeBytes) {
     doc.status = "failed";
@@ -100,7 +100,7 @@ export async function completeUpload(ctx: Ctx, id: string): Promise<MediaView> {
   }
   doc.set({
     sizeBytes: info.sizeBytes,
-    checksum: info.sha256,
+    checksum: info.checksum,
     width: info.width,
     height: info.height,
     durationSec: info.durationSec,
@@ -148,7 +148,7 @@ export async function deleteMedia(ctx: Ctx, id: string) {
     status: { $in: ["scheduled", "publishing", "pending_approval"] },
   });
   if (inUse) throw new AppError("MEDIA_IN_USE", "This file is attached to a scheduled post. Remove it from the post first.", 409);
-  await storage().remove(doc.storageKey);
+  await (await storage()).remove(doc.storageKey);
   await PostGroup.updateMany({ workspaceId: ctx.workspaceId, status: "draft" }, { $pull: { mediaIds: doc._id } });
   await doc.deleteOne();
 }

@@ -5,7 +5,8 @@ import { safeEqual } from "../crypto";
 
 export interface FileInfo {
   sizeBytes: number;
-  sha256: string;
+  /** "sha256:<hex>" when we hash the bytes ourselves, "etag:<etag>" from object storage. */
+  checksum: string;
   width?: number;
   height?: number;
   durationSec?: number;
@@ -18,12 +19,9 @@ export interface UploadTarget {
   expiresAt: string;
 }
 
-/**
- * Where media lives. Hostinger today; an S3-compatible bucket (R2) later should only
- * need a new implementation of this interface and a config change.
- */
+/** Where media lives: Cloudflare R2, a Hostinger upload service + CDN, or local disk in dev. */
 export interface Storage {
-  createUpload(key: string, opts: { mime: string; maxBytes: number }): UploadTarget;
+  createUpload(key: string, opts: { mime: string; maxBytes: number }): Promise<UploadTarget>;
   publicUrl(key: string): string;
   inspect(key: string): Promise<FileInfo | null>;
   remove(key: string): Promise<void>;
@@ -60,7 +58,7 @@ class HostingerStorage implements Storage {
   private uploadBase = requireEnv("UPLOAD_BASE_URL").replace(/\/$/, "");
   private cdnBase = requireEnv("CDN_BASE_URL").replace(/\/$/, "");
 
-  createUpload(key: string, opts: { mime: string; maxBytes: number }): UploadTarget {
+  async createUpload(key: string, opts: { mime: string; maxBytes: number }): Promise<UploadTarget> {
     const { exp, query } = uploadQuery(key, opts.mime, opts.maxBytes);
     return {
       url: `${this.uploadBase}/upload/${key}?${query}`,
@@ -86,7 +84,8 @@ class HostingerStorage implements Storage {
     });
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(`Upload service meta failed: ${res.status}`);
-    return (await res.json()) as FileInfo;
+    const meta = (await res.json()) as Omit<FileInfo, "checksum"> & { sha256: string };
+    return { ...meta, checksum: `sha256:${meta.sha256}` };
   }
 
   async remove(key: string) {
@@ -102,7 +101,7 @@ class HostingerStorage implements Storage {
 // ----- Local disk, for development. Served by /api/dev-storage. -----
 
 class LocalStorage implements Storage {
-  createUpload(key: string, opts: { mime: string; maxBytes: number }): UploadTarget {
+  async createUpload(key: string, opts: { mime: string; maxBytes: number }): Promise<UploadTarget> {
     const { exp, query } = uploadQuery(key, opts.mime, opts.maxBytes);
     return {
       url: `${appUrl()}/api/dev-storage/${key}?${query}`,
@@ -129,10 +128,23 @@ class LocalStorage implements Storage {
 
 let instance: Storage | null = null;
 
-export function storage(): Storage {
+export type StorageDriver = "r2" | "hostinger" | "local";
+
+export function storageDriver(): StorageDriver {
+  const set = optionalEnv("STORAGE_DRIVER");
+  if (set === "r2" || set === "hostinger" || set === "local") return set;
+  return optionalEnv("R2_BUCKET") ? "r2" : optionalEnv("UPLOAD_BASE_URL") ? "hostinger" : "local";
+}
+
+export async function storage(): Promise<Storage> {
   if (instance) return instance;
-  const driver = optionalEnv("STORAGE_DRIVER") ?? (optionalEnv("UPLOAD_BASE_URL") ? "hostinger" : "local");
-  instance = driver === "hostinger" ? new HostingerStorage() : new LocalStorage();
+  const driver = storageDriver();
+  if (driver === "r2") {
+    const { R2Storage } = await import("./r2");
+    instance = new R2Storage();
+  } else {
+    instance = driver === "hostinger" ? new HostingerStorage() : new LocalStorage();
+  }
   return instance;
 }
 

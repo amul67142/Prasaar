@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { imageSize } from "image-size";
+import { imageDimensions } from "./dims";
 import { KEY_RE, type FileInfo } from "./index";
 
 const ROOT = path.join(process.cwd(), ".storage");
@@ -34,19 +34,11 @@ export async function inspectLocalFile(key: string): Promise<FileInfo | null> {
   } catch {
     return null;
   }
-  const info: FileInfo = { sizeBytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") };
-  try {
-    const dims = imageSize(bytes);
-    if (dims.width && dims.height) {
-      // EXIF orientations 5-8 rotate the image a quarter turn.
-      const rotated = (dims.orientation ?? 1) >= 5;
-      info.width = rotated ? dims.height : dims.width;
-      info.height = rotated ? dims.width : dims.height;
-    }
-  } catch {
-    // Not an image (or a format image-size doesn't know); dimensions stay unknown.
-  }
-  return info;
+  return {
+    sizeBytes: bytes.length,
+    checksum: `sha256:${createHash("sha256").update(bytes).digest("hex")}`,
+    ...imageDimensions(bytes),
+  };
 }
 
 export async function removeLocalFile(key: string) {
