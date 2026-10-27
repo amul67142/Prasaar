@@ -1,0 +1,16 @@
+{
+  "name": "prasaar-upload-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "image-size": "^2.0.2"
+  }
+}

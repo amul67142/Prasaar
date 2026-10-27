@@ -1,36 +1,63 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Prasaar
 
-## Getting Started
+India-first social media scheduler. Phase 1 (MVP) of the PRD in `D:\brainstorming\PRD-India-Social-Scheduler.md`: connect Facebook Pages, Instagram, LinkedIn, Telegram, Bluesky and Mastodon; write once in the composer, adjust per platform, and schedule, queue or publish from a shared calendar.
 
-First, run the development server:
+Next.js 16 (App Router, Cache Components) · MongoDB (Mongoose) · Auth.js · Upstash QStash · Tailwind + shadcn/ui (Base UI) · media on Hostinger.
+
+## Run it locally
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env.local      # then fill ENCRYPTION_KEY, AUTH_SECRET, UPLOAD_SIGNING_SECRET
+npm run db:dev                  # local MongoDB in .data/mongo, no Docker needed
+npm run dev                     # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Without the optional services, local dev falls back to:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Service | Fallback |
+| --- | --- |
+| Resend (email) | Emails print to the server console, links included |
+| QStash (queue) | `src/instrumentation.ts` runs the publish sweep every 15 s |
+| Upstash Redis (rate limits) | In-memory counters |
+| Hostinger upload service + CDN | Files saved to `.storage/` and served by `/api/dev-storage` |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Instagram and Facebook fetch media by public URL, so posting media to them only works with the real CDN (or a tunnel).
 
-## Learn More
+Checks:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm run typecheck
+npm run lint
+npm run smoke      # publishing engine against a fake Mastodon server (needs db:dev)
+npm run build
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Layout
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Path | What |
+| --- | --- |
+| `src/lib/db/models.ts` | All collections (PRD section 5) |
+| `src/lib/session.ts` | `requireCtx()`: user + workspace + role; every service takes this `Ctx` and filters by `workspaceId` |
+| `src/lib/services/*` | Channels, posts, media, team, accounts. The dashboard calls these; the phase-2 REST API and MCP server will too |
+| `src/lib/platforms/rules.ts` | Per-platform limits, shared by the composer (live) and the server (on save) |
+| `src/lib/platforms/<name>.ts` | One adapter per platform: `publish`, `check`, optional `refresh` |
+| `src/lib/platforms/connect/*` | OAuth (Meta, LinkedIn, Mastodon) and form connects (Telegram, Bluesky) |
+| `src/lib/engine.ts` | Atomic lock, publish, retry (1 / 5 / 15 min), failure alerts, safety sweep |
+| `src/lib/storage/` | `Storage` interface: Hostinger now, R2 later by config |
+| `upload-service/` | Node app for Hostinger: signed direct uploads from the browser |
+| `vercel.json` | Mumbai region; crons for sweep (every minute), token refresh, media cleanup |
 
-## Deploy on Vercel
+## Before real users can connect
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+These are outside the code and on you:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. **Meta app** (new, Prasaar-branded): add Facebook Login for Business with the permissions in PRD section 4. Callback `{APP_URL}/api/connect/meta/callback`, data deletion `{APP_URL}/api/meta/data-deletion`, deauthorize `{APP_URL}/api/meta/deauthorize`. Submit for review with screen recordings.
+2. **LinkedIn app**: Sign In with LinkedIn + Share on LinkedIn now; apply for Community Management API for company pages, then set `LINKEDIN_ORG_SCOPES=1`.
+3. **Legal pages**: `/privacy`, `/terms` and `/data-deletion` are drafts. Fill the contact, grievance officer and address (`src/app/(legal)/legal-config.ts` or the `NEXT_PUBLIC_*` env vars) and get them reviewed.
+4. **Hostinger**: deploy `upload-service/` and turn off CDN image optimisation (see `upload-service/README.md`).
+5. **Vercel Pro** (per-minute cron), MongoDB Atlas in Mumbai, Upstash QStash + Redis, Resend.
+
+## Not in phase 1
+
+Approvals, bulk CSV, analytics, REST API, MCP, webhooks, agency client workspaces and billing are phase 2+. The data model already has room for them (`approval` on post groups, `parentAgencyId` and `planId` on workspaces).

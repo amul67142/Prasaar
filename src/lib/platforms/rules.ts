@@ -1,0 +1,217 @@
+// Platform posting rules. Client-safe: used by the composer for live checks and by
+// the server before saving, so a bad post fails when written, not at send time.
+import type { Platform } from "./catalog";
+
+export type MediaKind = "image" | "video" | "document";
+export type PostFormat = "feed" | "reel" | "story";
+
+export interface PlatformRules {
+  maxChars: number;
+  /** Bluesky counts graphemes; everyone else counts UTF-16 characters. */
+  countMode: "chars" | "graphemes";
+  /** Lower limit for text when media is attached (Telegram captions). */
+  maxCaptionChars?: number;
+  maxHashtags?: number;
+  requiresMedia: boolean;
+  maxImages: number;
+  maxVideos: number;
+  maxDocuments: number;
+  /** Max items in one post across all kinds. */
+  maxItems: number;
+  /** Images and videos in the same post. */
+  allowMixed: boolean;
+  mimes: Record<MediaKind, string[]>;
+  maxBytes: Record<MediaKind, number>;
+  firstComment: boolean;
+  formats?: PostFormat[];
+}
+
+const MB = 1024 * 1024;
+const IMAGE_COMMON = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+const VIDEO_COMMON = ["video/mp4", "video/quicktime"];
+
+export const PLATFORM_RULES: Record<Platform, PlatformRules> = {
+  facebook: {
+    maxChars: 63206,
+    countMode: "chars",
+    requiresMedia: false,
+    maxImages: 10,
+    maxVideos: 1,
+    maxDocuments: 0,
+    maxItems: 10,
+    allowMixed: false,
+    mimes: { image: IMAGE_COMMON, video: VIDEO_COMMON, document: [] },
+    maxBytes: { image: 10 * MB, video: 1024 * MB, document: 0 },
+    firstComment: true,
+    formats: ["feed", "reel"],
+  },
+  instagram: {
+    maxChars: 2200,
+    countMode: "chars",
+    maxHashtags: 30,
+    requiresMedia: true,
+    maxImages: 10,
+    maxVideos: 10,
+    maxDocuments: 0,
+    maxItems: 10,
+    allowMixed: true,
+    mimes: { image: ["image/jpeg"], video: VIDEO_COMMON, document: [] },
+    maxBytes: { image: 8 * MB, video: 300 * MB, document: 0 },
+    firstComment: true,
+    formats: ["feed", "reel", "story"],
+  },
+  linkedin: {
+    maxChars: 3000,
+    countMode: "chars",
+    requiresMedia: false,
+    maxImages: 20,
+    maxVideos: 1,
+    maxDocuments: 1,
+    maxItems: 20,
+    allowMixed: false,
+    mimes: { image: ["image/jpeg", "image/png", "image/gif"], video: ["video/mp4"], document: ["application/pdf"] },
+    maxBytes: { image: 8 * MB, video: 500 * MB, document: 100 * MB },
+    firstComment: true,
+  },
+  telegram: {
+    maxChars: 4096,
+    maxCaptionChars: 1024,
+    countMode: "chars",
+    requiresMedia: false,
+    maxImages: 10,
+    maxVideos: 10,
+    maxDocuments: 1,
+    maxItems: 10,
+    allowMixed: true,
+    mimes: { image: IMAGE_COMMON.filter((m) => m !== "image/gif"), video: VIDEO_COMMON, document: ["application/pdf"] },
+    maxBytes: { image: 10 * MB, video: 50 * MB, document: 50 * MB },
+    firstComment: false,
+  },
+  bluesky: {
+    maxChars: 300,
+    countMode: "graphemes",
+    requiresMedia: false,
+    maxImages: 4,
+    maxVideos: 0,
+    maxDocuments: 0,
+    maxItems: 4,
+    allowMixed: false,
+    mimes: { image: ["image/jpeg", "image/png", "image/webp"], video: [], document: [] },
+    maxBytes: { image: 976 * 1024, video: 0, document: 0 },
+    firstComment: false,
+  },
+  mastodon: {
+    maxChars: 500,
+    countMode: "chars",
+    requiresMedia: false,
+    maxImages: 4,
+    maxVideos: 1,
+    maxDocuments: 0,
+    maxItems: 4,
+    allowMixed: false,
+    mimes: { image: IMAGE_COMMON, video: VIDEO_COMMON, document: [] },
+    maxBytes: { image: 16 * MB, video: 99 * MB, document: 0 },
+    firstComment: true,
+  },
+};
+
+export interface MediaInfo {
+  kind: MediaKind;
+  mime: string;
+  sizeBytes: number;
+  width?: number | null;
+  height?: number | null;
+  durationSec?: number | null;
+  filename?: string;
+}
+
+export interface Issue {
+  severity: "error" | "warning";
+  code: string;
+  message: string;
+  field?: string;
+}
+
+export function countText(text: string, mode: PlatformRules["countMode"]): number {
+  if (mode === "graphemes" && typeof Intl !== "undefined" && "Segmenter" in Intl) {
+    return Array.from(new Intl.Segmenter().segment(text)).length;
+  }
+  return text.length;
+}
+
+/** Effective character limit, given attached media and per-channel overrides (Mastodon servers vary). */
+export function charLimit(platform: Platform, hasMedia: boolean, maxCharsOverride?: number): number {
+  const rules = PLATFORM_RULES[platform];
+  const base = maxCharsOverride ?? rules.maxChars;
+  return hasMedia && rules.maxCaptionChars ? Math.min(base, rules.maxCaptionChars) : base;
+}
+
+const fmtMb = (bytes: number) => (bytes >= MB ? `${Math.round(bytes / MB)} MB` : `${Math.round(bytes / 1024)} KB`);
+
+export function validatePost(input: {
+  platform: Platform;
+  text: string;
+  media: MediaInfo[];
+  format?: PostFormat;
+  maxCharsOverride?: number;
+}): Issue[] {
+  const { platform, text, media } = input;
+  const rules = PLATFORM_RULES[platform];
+  const format = input.format ?? "feed";
+  const issues: Issue[] = [];
+  const err = (code: string, message: string, field?: string) => issues.push({ severity: "error", code, message, field });
+  const warn = (code: string, message: string, field?: string) =>
+    issues.push({ severity: "warning", code, message, field });
+
+  const limit = charLimit(platform, media.length > 0, input.maxCharsOverride);
+  const length = countText(text, rules.countMode);
+  if (length > limit) err("TEXT_TOO_LONG", `Text is ${length} characters; the limit is ${limit}.`, "content");
+  if (!text.trim() && media.length === 0) err("EMPTY_POST", "Add some text or media.", "content");
+
+  if (rules.maxHashtags) {
+    const tags = text.match(/#[\p{L}\p{N}_]+/gu)?.length ?? 0;
+    if (tags > rules.maxHashtags) err("TOO_MANY_HASHTAGS", `Use at most ${rules.maxHashtags} hashtags (you have ${tags}).`, "content");
+  }
+
+  if (rules.formats && !rules.formats.includes(format)) err("FORMAT_UNSUPPORTED", `This platform can't post a ${format}.`);
+  if (rules.requiresMedia && media.length === 0) err("MEDIA_REQUIRED", "This platform needs at least one image or video.", "mediaIds");
+
+  const images = media.filter((m) => m.kind === "image").length;
+  const videos = media.filter((m) => m.kind === "video").length;
+  const docs = media.filter((m) => m.kind === "document").length;
+
+  if (media.length > rules.maxItems) err("TOO_MANY_MEDIA", `At most ${rules.maxItems} files per post.`, "mediaIds");
+  if (images > rules.maxImages) err("TOO_MANY_IMAGES", rules.maxImages === 0 ? "Images aren't supported." : `At most ${rules.maxImages} images.`, "mediaIds");
+  if (videos > rules.maxVideos) err("TOO_MANY_VIDEOS", rules.maxVideos === 0 ? "Video isn't supported here yet." : `At most ${rules.maxVideos} video${rules.maxVideos > 1 ? "s" : ""}.`, "mediaIds");
+  if (docs > rules.maxDocuments) err("DOCUMENTS_UNSUPPORTED", rules.maxDocuments === 0 ? "Documents aren't supported." : `At most ${rules.maxDocuments} document.`, "mediaIds");
+  if (docs > 0 && images + videos > 0) err("MIXED_MEDIA", "A document can't be combined with images or video.", "mediaIds");
+  if (!rules.allowMixed && images > 0 && videos > 0) err("MIXED_MEDIA", "Images and video can't be mixed in one post here.", "mediaIds");
+
+  if (platform === "instagram") {
+    if (format === "reel" && (videos !== 1 || images > 0)) err("REEL_NEEDS_ONE_VIDEO", "A reel needs exactly one video.", "mediaIds");
+    if (format === "story" && media.length !== 1) err("STORY_NEEDS_ONE_FILE", "A story needs exactly one image or video.", "mediaIds");
+  }
+  if (platform === "facebook" && format === "reel" && (videos !== 1 || images > 0))
+    err("REEL_NEEDS_ONE_VIDEO", "A reel needs exactly one video.", "mediaIds");
+
+  media.forEach((m, i) => {
+    const field = `mediaIds[${i}]`;
+    const allowed = rules.mimes[m.kind];
+    if (allowed.length && !allowed.includes(m.mime)) {
+      err("MEDIA_TYPE_UNSUPPORTED", `${m.filename ?? "File"}: ${m.mime} isn't accepted. Use ${allowed.map((x) => x.split("/")[1]).join(", ")}.`, field);
+    }
+    const max = rules.maxBytes[m.kind];
+    if (max && m.sizeBytes > max) err("MEDIA_TOO_LARGE", `${m.filename ?? "File"} is ${fmtMb(m.sizeBytes)}; the limit is ${fmtMb(max)}.`, field);
+
+    if (platform === "instagram" && m.kind === "image" && m.width && m.height && format === "feed") {
+      const ratio = m.width / m.height;
+      if (ratio < 0.8 || ratio > 1.91)
+        err("ASPECT_RATIO", `${m.filename ?? "Image"}: Instagram feed images must be between 4:5 and 1.91:1.`, field);
+    }
+    if (platform === "instagram" && m.kind === "video" && m.durationSec && (format === "reel" ? m.durationSec > 900 : m.durationSec > 60) && format !== "story") {
+      warn("VIDEO_LONG", `${m.filename ?? "Video"} may be too long for Instagram.`, field);
+    }
+  });
+
+  return issues;
+}
