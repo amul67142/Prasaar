@@ -25,6 +25,10 @@ if (!SECRET || !MEDIA_ROOT || !META_ROOT || !APP_ORIGIN) {
 }
 
 const KEY_RE = /^media\/[a-f0-9]{24}\/[A-Za-z0-9_-]{16,64}\.[a-z0-9]{2,5}$/;
+
+// The media folder sits inside a public web root: make sure Apache never lists it.
+await mkdir(path.join(MEDIA_ROOT, "media"), { recursive: true });
+await writeFile(path.join(MEDIA_ROOT, "media", ".htaccess"), "Options -Indexes\n");
 const sign = (payload) => createHmac("sha256", SECRET).update(payload).digest("base64url");
 const safeEqual = (a, b) => {
   const ab = Buffer.from(a);
