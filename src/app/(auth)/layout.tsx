@@ -3,7 +3,7 @@ import { Logo } from "@/components/brand";
 
 const POINTS = [
   { title: "Up and running in minutes", body: "Connect your accounts once, then plan and schedule posts for every platform from one place." },
-  { title: "Every channel, one calendar", body: "Facebook Pages, Instagram, LinkedIn, Telegram, Bluesky and Mastodon, with more on the way." },
+  { title: "Every channel, one calendar", body: "Facebook Pages, Instagram, LinkedIn, YouTube, Telegram, Bluesky and Mastodon, with more on the way." },
   { title: "Built for teams and agencies", body: "A workspace per brand or client, roles for your team, and times in IST by default." },
 ];
 

@@ -39,7 +39,7 @@ async function Content({ searchParams }: { searchParams: PageProps<"/channels">[
           <EmptyState
             icon={<Link2 />}
             title="No channels yet"
-            description="Connect a Facebook Page, Instagram, LinkedIn, Telegram, Bluesky or Mastodon account to start posting."
+            description="Connect a Facebook Page, Instagram, LinkedIn, YouTube, Telegram, Bluesky or Mastodon account to start posting."
             action={manage ? <ConnectButton /> : undefined}
           />
         </div>

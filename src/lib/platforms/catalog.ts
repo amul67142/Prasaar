@@ -1,6 +1,6 @@
 // Client-safe platform metadata. No secrets, no server imports.
 
-export const PLATFORMS = ["facebook", "instagram", "linkedin", "telegram", "bluesky", "mastodon"] as const;
+export const PLATFORMS = ["facebook", "instagram", "linkedin", "telegram", "bluesky", "mastodon", "youtube"] as const;
 export type Platform = (typeof PLATFORMS)[number];
 
 export type ConnectMethod = "oauth" | "form";
@@ -44,6 +44,12 @@ export const PLATFORM_INFO: Record<
     color: "#6364FF",
     connect: "oauth",
     connectHint: "Enter your server (for example mastodon.social) and log in there.",
+  },
+  youtube: {
+    label: "YouTube",
+    color: "#FF0000",
+    connect: "oauth",
+    connectHint: "Log in with Google and pick your channel. Uploads videos and Shorts.",
   },
 };
 

@@ -21,7 +21,7 @@ import { AppError, notFound } from "../errors";
 import { planLimits } from "../plans";
 import { assertCan, type Ctx } from "../session";
 import { PLATFORMS, type Platform } from "../platforms/catalog";
-import { validatePost, type Issue, type PostFormat } from "../platforms/rules";
+import { validatePost, YOUTUBE_TITLE_MAX, type Issue, type PostFormat } from "../platforms/rules";
 import { after } from "next/server";
 import { enqueuePublish, queueEnabled } from "../queue";
 import { addDaysYmd, weekdayOfYmd, ymd, zonedToUtc } from "../time";
@@ -31,7 +31,11 @@ const override = z.object({
   content: z.string().max(70000).optional(),
   firstComment: z.string().max(5000).optional(),
   format: z.enum(["feed", "reel", "story"]).optional(),
+  title: z.string().trim().max(YOUTUBE_TITLE_MAX).optional(),
+  privacy: z.enum(["public", "unlisted", "private"]).optional(),
+  madeForKids: z.boolean().optional(),
 });
+export type PlatformOverride = z.infer<typeof override>;
 
 export const postInputSchema = z.object({
   content: z.string().max(70000).default(""),

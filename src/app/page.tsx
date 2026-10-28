@@ -55,7 +55,7 @@ const PRO_TIERS = [
 const FAQ = [
   {
     q: "Which platforms can I post to?",
-    a: "Facebook Pages, Instagram (Business and Creator), LinkedIn, Telegram, Bluesky and Mastodon today. Threads, YouTube, X, Google Business Profile, TikTok and Pinterest follow.",
+    a: "Facebook Pages, Instagram (Business and Creator), LinkedIn, YouTube, Telegram, Bluesky and Mastodon today. Threads, X, Google Business Profile, TikTok and Pinterest follow.",
   },
   {
     q: "Is my data stored in India?",
@@ -191,7 +191,7 @@ export default function Home() {
               Plan a month of posts in an afternoon. Publish everywhere, on time.
             </h1>
             <p className="mt-5 max-w-xl text-lg text-pretty text-muted-foreground">
-              Prasaar schedules posts to Facebook, Instagram, LinkedIn, Telegram, Bluesky and Mastodon from one calendar, for Indian creators, businesses and the agencies that
+              Prasaar schedules posts to Facebook, Instagram, LinkedIn, YouTube, Telegram, Bluesky and Mastodon from one calendar, for Indian creators, businesses and the agencies that
               run them.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">

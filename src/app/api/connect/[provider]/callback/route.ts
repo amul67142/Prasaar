@@ -5,6 +5,7 @@ import { instagramCandidate } from "@/lib/platforms/connect/instagram";
 import { metaCandidates } from "@/lib/platforms/connect/meta";
 import { linkedinCandidates } from "@/lib/platforms/connect/linkedin";
 import { mastodonCandidate } from "@/lib/platforms/connect/mastodon";
+import { youtubeCandidate } from "@/lib/platforms/connect/youtube";
 import { handleConnectError, isOAuthProvider, redirectTo, redirectWithError } from "@/lib/platforms/connect/oauth";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ provider: string }> }) {
@@ -23,8 +24,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ prov
     }
 
     // One account per login: add it straight away.
-    if (provider === "mastodon" || provider === "instagram") {
-      const candidate = provider === "mastodon" ? await mastodonCandidate(stateDoc, code) : await instagramCandidate(code);
+    if (provider === "mastodon" || provider === "instagram" || provider === "youtube") {
+      const candidate =
+        provider === "mastodon"
+          ? await mastodonCandidate(stateDoc, code)
+          : provider === "youtube"
+            ? await youtubeCandidate(code)
+            : await instagramCandidate(code);
       await upsertChannels(ctx, [candidate]);
       return redirectTo("/channels?connected=1");
     }

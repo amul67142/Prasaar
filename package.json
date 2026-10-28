@@ -12,7 +12,8 @@
     "smoke": "tsx --tsconfig scripts/tsconfig.json --env-file=.env.local scripts/smoke-engine.mts",
     "db:setup": "tsx --tsconfig scripts/tsconfig.json --env-file=.env.local scripts/db-setup.mts",
     "db:setup:prod": "tsx --tsconfig scripts/tsconfig.json --env-file=.env.production.local scripts/db-setup.mts",
-    "r2:check": "tsx --tsconfig scripts/tsconfig.json --env-file=.env.production.local scripts/r2-check.mts"
+    "r2:check": "tsx --tsconfig scripts/tsconfig.json --env-file=.env.production.local scripts/r2-check.mts",
+    "youtube:check": "tsx --tsconfig scripts/tsconfig.json scripts/youtube-check.mts"
   },
   "dependencies": {
     "@atproto/api": "^0.29.4",

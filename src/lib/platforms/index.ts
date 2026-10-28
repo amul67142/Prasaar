@@ -7,6 +7,7 @@ import { linkedinAdapter } from "./linkedin";
 import { telegramAdapter } from "./telegram";
 import { blueskyAdapter } from "./bluesky";
 import { mastodonAdapter } from "./mastodon";
+import { youtubeAdapter } from "./youtube";
 
 // Each adapter is typed with its own credential/meta shapes; the engine works with the generic form.
 const ADAPTERS = {
@@ -16,6 +17,7 @@ const ADAPTERS = {
   telegram: telegramAdapter,
   bluesky: blueskyAdapter,
   mastodon: mastodonAdapter,
+  youtube: youtubeAdapter,
 } as unknown as Record<Platform, PlatformAdapter>;
 
 export function getAdapter(platform: Platform): PlatformAdapter {

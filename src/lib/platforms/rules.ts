@@ -113,7 +113,38 @@ export const PLATFORM_RULES: Record<Platform, PlatformRules> = {
     maxBytes: { image: 16 * MB, video: 99 * MB, document: 0 },
     firstComment: true,
   },
+  // The post text becomes the video description; the title is a separate per-platform field.
+  youtube: {
+    maxChars: 5000,
+    countMode: "chars",
+    requiresMedia: true,
+    maxImages: 0,
+    maxVideos: 1,
+    maxDocuments: 0,
+    maxItems: 1,
+    allowMixed: false,
+    mimes: { image: [], video: VIDEO_COMMON, document: [] },
+    maxBytes: { image: 0, video: 2048 * MB, document: 0 },
+    firstComment: false,
+    formats: ["feed", "reel"],
+  },
 };
+
+/** Composer label for a post format; YouTube calls a reel a Short. */
+export function formatLabel(platform: Platform, format: PostFormat): string {
+  if (platform === "youtube") return format === "reel" ? "Short" : "Video";
+  return format === "feed" ? "Feed post" : format === "reel" ? "Reel" : "Story";
+}
+
+export const YOUTUBE_TITLE_MAX = 100;
+export type YouTubePrivacy = "public" | "unlisted" | "private";
+
+/** YouTube's title: the one set in the composer, else the first line of the text. */
+export function youtubeTitle(title: string | undefined, text: string, filename?: string): string {
+  const firstLine = text.split("\n").map((l) => l.trim()).find(Boolean);
+  const raw = title?.trim() || firstLine || filename?.replace(/\.[^.]+$/, "") || "Untitled video";
+  return Array.from(raw.replace(/[<>]/g, "")).slice(0, YOUTUBE_TITLE_MAX).join("");
+}
 
 export interface MediaInfo {
   kind: MediaKind;
@@ -193,6 +224,15 @@ export function validatePost(input: {
   }
   if (platform === "facebook" && format === "reel" && (videos !== 1 || images > 0))
     err("REEL_NEEDS_ONE_VIDEO", "A reel needs exactly one video.", "mediaIds");
+  if (platform === "youtube") {
+    if (videos !== 1) err("VIDEO_REQUIRED", "YouTube needs exactly one video.", "mediaIds");
+    if (/[<>]/.test(text)) err("YOUTUBE_ANGLE_BRACKETS", "YouTube doesn't allow < or > in the description.", "content");
+    const v = media.find((m) => m.kind === "video");
+    if (v && format === "reel") {
+      if (v.durationSec && v.durationSec > 180) warn("SHORT_TOO_LONG", "Shorts can be up to 3 minutes; longer videos post as regular videos.", "mediaIds[0]");
+      if (v.width && v.height && v.width > v.height) warn("SHORT_NOT_VERTICAL", "Shorts should be vertical or square; this video is landscape.", "mediaIds[0]");
+    }
+  }
 
   media.forEach((m, i) => {
     const field = `mediaIds[${i}]`;

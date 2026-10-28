@@ -27,7 +27,7 @@ export function Flash({ error, connected }: { error?: string; connected?: string
   );
 }
 
-const oauthStart = (provider: "meta" | "instagram" | "linkedin" | "mastodon", instance?: string) =>
+const oauthStart = (provider: "meta" | "instagram" | "linkedin" | "mastodon" | "youtube", instance?: string) =>
   `/api/connect/${provider}/start${instance ? `?instance=${encodeURIComponent(instance)}` : ""}`;
 
 type FormKind = "telegram" | "bluesky" | "mastodon";
@@ -39,6 +39,7 @@ function useConnect() {
     if (platform === "facebook") window.location.href = oauthStart("meta");
     else if (platform === "instagram") window.location.href = oauthStart("instagram");
     else if (platform === "linkedin") window.location.href = oauthStart("linkedin");
+    else if (platform === "youtube") window.location.href = oauthStart("youtube");
     else setForm(platform);
   };
   const dialogs = (
@@ -265,6 +266,7 @@ export function ChannelRow({ channel: c, manage, expiresLabel }: { channel: Chan
     if (c.platform === "facebook") window.location.href = oauthStart("meta");
     else if (c.platform === "instagram") window.location.href = oauthStart(c.meta.loginType === "facebook" ? "meta" : "instagram");
     else if (c.platform === "linkedin") window.location.href = oauthStart("linkedin");
+    else if (c.platform === "youtube") window.location.href = oauthStart("youtube");
     else if (c.platform === "mastodon") window.location.href = oauthStart("mastodon", String(c.meta.instance ?? ""));
     else setReconnect(c.platform);
   };

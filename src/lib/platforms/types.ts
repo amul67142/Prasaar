@@ -1,6 +1,6 @@
 import "server-only";
 import type { Platform } from "./catalog";
-import type { MediaKind, PostFormat } from "./rules";
+import type { MediaKind, PostFormat, YouTubePrivacy } from "./rules";
 
 /** A channel as an adapter sees it: credentials already decrypted. */
 export interface AdapterChannel<Creds = Record<string, unknown>, Meta = Record<string, unknown>> {
@@ -29,6 +29,10 @@ export interface PublishInput {
   media: AdapterMedia[];
   format: PostFormat;
   firstComment?: string;
+  /** YouTube only: video title, privacy and the made-for-kids declaration. */
+  title?: string;
+  privacy?: YouTubePrivacy;
+  madeForKids?: boolean;
 }
 
 export interface PublishResult {

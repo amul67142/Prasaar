@@ -35,7 +35,7 @@ async function Content({ searchParams }: { searchParams: PageProps<"/compose">["
     return (
       <EmptyState
         title="Connect an account first"
-        description="Add a Facebook Page, Instagram, LinkedIn, Telegram, Bluesky or Mastodon account to start posting."
+        description="Add a Facebook Page, Instagram, LinkedIn, YouTube, Telegram, Bluesky or Mastodon account to start posting."
         action={<Button render={<Link href="/channels" />}>Connect accounts</Button>}
       />
     );

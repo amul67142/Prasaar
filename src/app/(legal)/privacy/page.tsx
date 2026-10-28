@@ -39,9 +39,18 @@ export default function PrivacyPage() {
 
       <h2>Social platform data</h2>
       <p>
-        When you connect Facebook, Instagram, LinkedIn, Telegram, Bluesky or Mastodon, we receive only the permissions you approve on that platform&apos;s screen. We use them only to publish
-        and manage the posts you create in {LEGAL.product}. When you remove an account, we delete its tokens. You can also remove our access from the platform&apos;s own settings, or ask
-        us to delete Facebook and Instagram data using our <a href="/data-deletion">data deletion</a> page.
+        When you connect Facebook, Instagram, LinkedIn, YouTube, Telegram, Bluesky or Mastodon, we receive only the permissions you approve on that platform&apos;s screen. We use them only to
+        publish and manage the posts you create in {LEGAL.product}. When you remove an account, we delete its tokens. You can also remove our access from the platform&apos;s own settings, or
+        ask us to delete Facebook and Instagram data using our <a href="/data-deletion">data deletion</a> page.
+      </p>
+
+      <h2>YouTube</h2>
+      <p>
+        {LEGAL.product} uses YouTube API Services to upload the videos you schedule to your YouTube channel. By connecting a channel you agree to the{" "}
+        <a href="https://www.youtube.com/t/terms">YouTube Terms of Service</a>, and Google&apos;s use of your data is governed by the{" "}
+        <a href="https://policies.google.com/privacy">Google Privacy Policy</a>. We store your channel&apos;s name, ID and picture, and an access token that lets us upload on your behalf.
+        We don&apos;t read or change anything else on your channel. Disconnecting the channel in {LEGAL.product} deletes the token; you can also revoke our access at any time from{" "}
+        <a href="https://myaccount.google.com/permissions">Google security settings</a>.
       </p>
 
       <h2>Where your data is stored</h2>

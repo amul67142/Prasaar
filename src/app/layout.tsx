@@ -12,7 +12,7 @@ const brandFont = Bricolage_Grotesque({ variable: "--font-brand", subsets: ["lat
 
 export const metadata: Metadata = {
   title: { default: "Prasaar — schedule social posts from India", template: "%s · Prasaar" },
-  description: "Plan, schedule and publish to Facebook, Instagram, LinkedIn, Telegram, Bluesky and Mastodon from one calendar.",
+  description: "Plan, schedule and publish to Facebook, Instagram, LinkedIn, YouTube, Telegram, Bluesky and Mastodon from one calendar.",
 };
 
 export const viewport: Viewport = { width: "device-width", initialScale: 1 };

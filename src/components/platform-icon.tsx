@@ -5,7 +5,6 @@ import { PLATFORM_INFO, type Platform } from "@/lib/platforms/catalog";
 /** Platforms on the roadmap (PRD phases 2–3), shown greyed out next to the live ones. */
 export const UPCOMING = [
   { key: "threads", label: "Threads", path: siThreads.path, color: "#000000" },
-  { key: "youtube", label: "YouTube", path: siYoutube.path, color: "#FF0000" },
   { key: "x", label: "X", path: siX.path, color: "#000000" },
   { key: "tiktok", label: "TikTok", path: siTiktok.path, color: "#000000" },
   { key: "pinterest", label: "Pinterest", path: siPinterest.path, color: "#BD081C" },
@@ -18,6 +17,7 @@ const PATHS: Partial<Record<Platform, string>> = {
   telegram: siTelegram.path,
   bluesky: siBluesky.path,
   mastodon: siMastodon.path,
+  youtube: siYoutube.path,
 };
 
 const SIZES = { xs: "size-4 rounded-[5px]", sm: "size-5 rounded-md", md: "size-6 rounded-md", lg: "size-12 rounded-xl" };

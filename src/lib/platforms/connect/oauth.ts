@@ -4,7 +4,7 @@ import { appUrl, MissingEnvError } from "../../env";
 import { isAppError } from "../../errors";
 import { PlatformError } from "../types";
 
-export const OAUTH_PROVIDERS = ["meta", "instagram", "linkedin", "mastodon"] as const;
+export const OAUTH_PROVIDERS = ["meta", "instagram", "linkedin", "mastodon", "youtube"] as const;
 export type OAuthProvider = (typeof OAUTH_PROVIDERS)[number];
 
 export function isOAuthProvider(value: string): value is OAuthProvider {

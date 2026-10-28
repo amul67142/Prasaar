@@ -4,6 +4,7 @@ import { createOAuthState } from "@/lib/services/channels";
 import { instagramAuthorizeUrl } from "@/lib/platforms/connect/instagram";
 import { metaAuthorizeUrl } from "@/lib/platforms/connect/meta";
 import { linkedinAuthorizeUrl } from "@/lib/platforms/connect/linkedin";
+import { youtubeAuthorizeUrl } from "@/lib/platforms/connect/youtube";
 import { startMastodonConnect } from "@/lib/platforms/connect/mastodon";
 import { handleConnectError, isOAuthProvider, redirectWithError } from "@/lib/platforms/connect/oauth";
 
@@ -17,7 +18,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ prov
       url = await startMastodonConnect(ctx, req.nextUrl.searchParams.get("instance") ?? "");
     } else {
       const state = await createOAuthState(ctx, provider);
-      url = provider === "meta" ? metaAuthorizeUrl(state) : provider === "instagram" ? instagramAuthorizeUrl(state) : linkedinAuthorizeUrl(state);
+      url =
+        provider === "meta"
+          ? metaAuthorizeUrl(state)
+          : provider === "instagram"
+            ? instagramAuthorizeUrl(state)
+            : provider === "youtube"
+              ? youtubeAuthorizeUrl(state)
+              : linkedinAuthorizeUrl(state);
     }
     return NextResponse.redirect(url, 303);
   } catch (err) {

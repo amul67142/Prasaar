@@ -6,10 +6,9 @@ import { sendEmail } from "./email";
 import { enqueuePublish, queueEnabled } from "./queue";
 import { getAdapter } from "./platforms";
 import { PLATFORM_INFO, type Platform } from "./platforms/catalog";
-import type { PostFormat } from "./platforms/rules";
 import { PlatformError, type AdapterMedia } from "./platforms/types";
 import { markChannel, saveRefreshedCredentials, toAdapterChannel } from "./services/channels";
-import { refreshGroupStatus } from "./services/posts";
+import { refreshGroupStatus, type PlatformOverride } from "./services/posts";
 
 /** Delay before retry n (1-based) of a temporary failure. */
 const BACKOFF_MS = [60_000, 5 * 60_000, 15 * 60_000];
@@ -85,13 +84,16 @@ export async function publishPost(postId: string): Promise<"published" | "retryi
     });
 
     const platform = channel.platform as Platform;
-    const o = ((group.perPlatform ?? {}) as Record<string, { content?: string; firstComment?: string; format?: PostFormat }>)[platform] ?? {};
+    const o = ((group.perPlatform ?? {}) as Record<string, PlatformOverride>)[platform] ?? {};
     await log(post, "info", `Publishing to ${channel.displayName} (attempt ${post.attempts}).`);
     const result = await adapter.publish(adapterChannel, {
       text: o.content ?? group.content ?? "",
       media,
       format: o.format ?? "feed",
       firstComment: (o.firstComment ?? group.firstComment) || undefined,
+      title: o.title,
+      privacy: o.privacy,
+      madeForKids: o.madeForKids,
     });
 
     await Post.updateOne(
