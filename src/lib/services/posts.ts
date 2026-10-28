@@ -21,7 +21,16 @@ import { AppError, notFound } from "../errors";
 import { planLimits } from "../plans";
 import { assertCan, type Ctx } from "../session";
 import { PLATFORMS, type Platform } from "../platforms/catalog";
-import { validatePost, YOUTUBE_TITLE_MAX, type Issue, type PostFormat } from "../platforms/rules";
+import {
+  validatePost,
+  YOUTUBE_CATEGORY_IDS,
+  YOUTUBE_TAGS_MAX,
+  YOUTUBE_THUMBNAIL,
+  YOUTUBE_TITLE_MAX,
+  youtubeTagsLength,
+  type Issue,
+  type PostFormat,
+} from "../platforms/rules";
 import { after } from "next/server";
 import { enqueuePublish, queueEnabled } from "../queue";
 import { addDaysYmd, weekdayOfYmd, ymd, zonedToUtc } from "../time";
@@ -34,6 +43,18 @@ const override = z.object({
   title: z.string().trim().max(YOUTUBE_TITLE_MAX).optional(),
   privacy: z.enum(["public", "unlisted", "private"]).optional(),
   madeForKids: z.boolean().optional(),
+  // The rest are YouTube-only too.
+  tags: z
+    .array(z.string().trim().min(1).max(100))
+    .max(100)
+    .refine((t) => youtubeTagsLength(t) <= YOUTUBE_TAGS_MAX, `Tags can add up to ${YOUTUBE_TAGS_MAX} characters.`)
+    .optional(),
+  categoryId: z.enum(YOUTUBE_CATEGORY_IDS).optional(),
+  aiContent: z.boolean().optional(),
+  paidPromotion: z.boolean().optional(),
+  notifySubscribers: z.boolean().optional(),
+  embeddable: z.boolean().optional(),
+  thumbnailId: z.string().regex(/^[a-f0-9]{24}$/).optional(),
 });
 export type PlatformOverride = z.infer<typeof override>;
 
@@ -72,6 +93,8 @@ export interface PostGroupView {
   firstComment?: string;
   channelIds: string[];
   media: MediaView[];
+  /** The custom thumbnail chosen for YouTube, if any. */
+  youtubeThumbnail?: MediaView;
   scheduledAt?: string;
   status: GroupStatus;
   source: string;
@@ -105,7 +128,7 @@ function toPostView(p: PostDoc): PostView {
   };
 }
 
-function toGroupView(g: PostGroupDoc, media: MediaDoc[], posts: PostDoc[]): PostGroupView {
+function toGroupView(g: PostGroupDoc, media: MediaDoc[], posts: PostDoc[], youtubeThumbnail?: MediaDoc): PostGroupView {
   const ts = g as PostGroupDoc & { createdAt: Date; updatedAt: Date };
   return {
     id: g._id.toString(),
@@ -114,6 +137,7 @@ function toGroupView(g: PostGroupDoc, media: MediaDoc[], posts: PostDoc[]): Post
     firstComment: g.firstComment ?? undefined,
     channelIds: (g.channelIds ?? []).map(String),
     media: media.map(toMediaView),
+    youtubeThumbnail: youtubeThumbnail ? toMediaView(youtubeThumbnail) : undefined,
     scheduledAt: g.scheduledAt?.toISOString(),
     status: g.status as GroupStatus,
     source: g.source ?? "dashboard",
@@ -248,6 +272,13 @@ export async function savePostGroup(ctx: Ctx, rawInput: PostInput, opts: { id?: 
 
   const channels = await loadChannels(ctx, input.channelIds);
   const media = await loadPostMedia(ctx.workspaceId, input.mediaIds);
+  const thumbId = input.perPlatform.youtube?.thumbnailId;
+  if (thumbId) {
+    const [thumb] = await loadPostMedia(ctx.workspaceId, [thumbId]);
+    if (!(YOUTUBE_THUMBNAIL.mimes as readonly string[]).includes(thumb.mime) || thumb.sizeBytes > YOUTUBE_THUMBNAIL.maxBytes) {
+      throw new AppError("THUMBNAIL_INVALID", "YouTube thumbnails must be a JPEG or PNG under 2 MB.", 400, "thumbnail");
+    }
+  }
 
   if (!isDraft) {
     const inactive = channels.find((c) => c.status !== "active");
@@ -354,13 +385,15 @@ export async function getPostGroup(ctx: Ctx, id: string): Promise<PostGroupView>
   if (!Types.ObjectId.isValid(id)) throw notFound("Post");
   const group = (await PostGroup.findOne({ _id: id, workspaceId: ctx.workspaceId }).lean()) as PostGroupDoc | null;
   if (!group) throw notFound("Post");
-  const [media, posts] = await Promise.all([
+  const thumbId = (group.perPlatform as PostGroupView["perPlatform"] | undefined)?.youtube?.thumbnailId;
+  const [media, posts, thumb] = await Promise.all([
     Media.find({ _id: { $in: group.mediaIds }, workspaceId: ctx.workspaceId }).lean(),
     Post.find({ postGroupId: group._id }).sort({ createdAt: 1 }).lean(),
+    thumbId ? Media.findOne({ _id: thumbId, workspaceId: ctx.workspaceId }).lean() : null,
   ]);
   const byId = new Map(media.map((m) => [m._id.toString(), m as MediaDoc]));
   const ordered = group.mediaIds.map((m) => byId.get(m.toString())).filter(Boolean) as MediaDoc[];
-  return toGroupView(group, ordered, posts as PostDoc[]);
+  return toGroupView(group, ordered, posts as PostDoc[], (thumb as MediaDoc | null) ?? undefined);
 }
 
 export async function getPostLogs(ctx: Ctx, groupId: string) {

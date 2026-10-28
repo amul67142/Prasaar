@@ -146,6 +146,58 @@ export function youtubeTitle(title: string | undefined, text: string, filename?:
   return Array.from(raw.replace(/[<>]/g, "")).slice(0, YOUTUBE_TITLE_MAX).join("");
 }
 
+/** YouTube's video categories (the set offered for India). 22 is YouTube's own default. */
+export const YOUTUBE_CATEGORIES = [
+  { id: "1", label: "Film & Animation" },
+  { id: "2", label: "Autos & Vehicles" },
+  { id: "10", label: "Music" },
+  { id: "15", label: "Pets & Animals" },
+  { id: "17", label: "Sports" },
+  { id: "19", label: "Travel & Events" },
+  { id: "20", label: "Gaming" },
+  { id: "22", label: "People & Blogs" },
+  { id: "23", label: "Comedy" },
+  { id: "24", label: "Entertainment" },
+  { id: "25", label: "News & Politics" },
+  { id: "26", label: "Howto & Style" },
+  { id: "27", label: "Education" },
+  { id: "28", label: "Science & Technology" },
+  { id: "29", label: "Nonprofits & Activism" },
+] as const;
+export type YouTubeCategoryId = (typeof YOUTUBE_CATEGORIES)[number]["id"];
+export const YOUTUBE_CATEGORY_IDS = YOUTUBE_CATEGORIES.map((c) => c.id) as [YouTubeCategoryId, ...YouTubeCategoryId[]];
+
+/** YouTube counts tags as one comma-separated string of at most 500 characters, quoting tags with spaces. */
+export const YOUTUBE_TAGS_MAX = 500;
+export function youtubeTagsLength(tags: string[]): number {
+  return tags.reduce((n, t, i) => n + t.length + (/\s/.test(t) ? 2 : 0) + (i > 0 ? 1 : 0), 0);
+}
+/** "a, b ,#c" → ["a", "b", "c"], deduplicated. */
+export function parseYouTubeTags(input: string): string[] {
+  const seen = new Set<string>();
+  return input
+    .split(",")
+    .map((t) => t.trim().replace(/^#/, "").replace(/[<>]/g, ""))
+    .filter((t) => t && !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase()));
+}
+
+/** Custom thumbnails: JPEG or PNG up to 2 MB. Not settable on Shorts through the API. */
+export const YOUTUBE_THUMBNAIL = { mimes: ["image/jpeg", "image/png"], maxBytes: 2 * MB } as const;
+
+/** Everything YouTube-specific a post can carry, as the adapter receives it. */
+export interface YouTubeOptions {
+  title?: string;
+  privacy?: YouTubePrivacy;
+  madeForKids?: boolean;
+  tags?: string[];
+  categoryId?: YouTubeCategoryId;
+  /** "Altered or synthetic content": realistic AI-made or edited footage. */
+  aiContent?: boolean;
+  paidPromotion?: boolean;
+  notifySubscribers?: boolean;
+  embeddable?: boolean;
+}
+
 export interface MediaInfo {
   kind: MediaKind;
   mime: string;

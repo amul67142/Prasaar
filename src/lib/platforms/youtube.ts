@@ -1,7 +1,7 @@
 import "server-only";
 import { requireEnv } from "../env";
-import { fetchJson, platformFetch } from "./http";
-import { youtubeTitle } from "./rules";
+import { downloadMedia, fetchJson, platformFetch } from "./http";
+import { YOUTUBE_THUMBNAIL, youtubeTitle } from "./rules";
 import { PlatformError, type AdapterChannel, type AdapterMedia, type PlatformAdapter } from "./types";
 
 export interface YouTubeCredentials {
@@ -103,6 +103,23 @@ async function putChunk(session: string, chunk: Blob, start: number, total: numb
   throw new PlatformError(d?.code ?? `HTTP_${res.status}`, d?.message ?? `YouTube rejected the upload (HTTP ${res.status}).`, d?.temporary ?? res.status >= 500, body, d?.authFailed ?? false);
 }
 
+function describeThumbnailError(status: number, body: unknown) {
+  const reason = (body as { error?: { errors?: { reason?: string }[] } } | undefined)?.error?.errors?.[0]?.reason ?? "";
+  if (status === 403 && reason === "forbidden")
+    return { code: "THUMBNAIL_NOT_ALLOWED", message: "custom thumbnails need a phone-verified channel (youtube.com/verify)." };
+  if (status === 400 || status === 413) return { code: "THUMBNAIL_REJECTED", message: "the image must be a JPEG or PNG under 2 MB." };
+  return describeYouTubeError(status, body);
+}
+
+async function setThumbnail(token: string, videoId: string, image: AdapterMedia) {
+  const bytes = await downloadMedia(image.url, YOUTUBE_THUMBNAIL.maxBytes);
+  await platformFetch(
+    `https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${encodeURIComponent(videoId)}&uploadType=media`,
+    { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": image.mime }, body: bytes, timeoutMs: 60_000 },
+    describeThumbnailError,
+  );
+}
+
 export const youtubeAdapter: PlatformAdapter<YouTubeCredentials, YouTubeMeta> = {
   platform: "youtube",
 
@@ -110,10 +127,13 @@ export const youtubeAdapter: PlatformAdapter<YouTubeCredentials, YouTubeMeta> = 
     const video = input.media.find((m) => m.kind === "video");
     if (!video) throw new PlatformError("VIDEO_REQUIRED", "YouTube needs a video.");
     const token = await youtubeAccessToken(channel.credentials);
+    const o = input.youtube ?? {};
 
     // 1. Start a resumable upload session with the video's details.
+    const parts = ["snippet", "status", ...(o.paidPromotion ? ["paidProductPlacementDetails"] : [])];
+    const query = new URLSearchParams({ uploadType: "resumable", part: parts.join(","), notifySubscribers: String(o.notifySubscribers ?? true) });
     const init = await platformFetch(
-      `https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status`,
+      `https://www.googleapis.com/upload/youtube/v3/videos?${query}`,
       {
         method: "POST",
         headers: {
@@ -123,8 +143,19 @@ export const youtubeAdapter: PlatformAdapter<YouTubeCredentials, YouTubeMeta> = 
           "X-Upload-Content-Type": video.mime,
         },
         body: JSON.stringify({
-          snippet: { title: youtubeTitle(input.title, input.text, video.filename), description: input.text, categoryId: "22" },
-          status: { privacyStatus: input.privacy ?? "public", selfDeclaredMadeForKids: input.madeForKids ?? false },
+          snippet: {
+            title: youtubeTitle(o.title, input.text, video.filename),
+            description: input.text,
+            categoryId: o.categoryId ?? "22",
+            ...(o.tags?.length ? { tags: o.tags } : {}),
+          },
+          status: {
+            privacyStatus: o.privacy ?? "public",
+            selfDeclaredMadeForKids: o.madeForKids ?? false,
+            embeddable: o.embeddable ?? true,
+            ...(o.aiContent ? { containsSyntheticMedia: true } : {}),
+          },
+          ...(o.paidPromotion ? { paidProductPlacementDetails: { hasPaidProductPlacement: true } } : {}),
         }),
         timeoutMs: 60_000,
       },
@@ -141,9 +172,19 @@ export const youtubeAdapter: PlatformAdapter<YouTubeCredentials, YouTubeMeta> = 
       const result = await putChunk(session, await readRange(video, offset, end, cache), offset, video.sizeBytes);
       if (typeof result === "object") {
         const short = input.format === "reel";
+        const warnings: string[] = [];
+        // 3. The video is live either way; a refused thumbnail is only a warning.
+        if (input.thumbnail && !short) {
+          try {
+            await setThumbnail(token, result.id, input.thumbnail);
+          } catch (err) {
+            warnings.push(`The video is up, but YouTube didn't accept the thumbnail: ${err instanceof Error ? err.message : "unknown error"}`);
+          }
+        }
         return {
           platformPostId: result.id,
           permalink: short ? `https://www.youtube.com/shorts/${result.id}` : `https://www.youtube.com/watch?v=${result.id}`,
+          warnings: warnings.length ? warnings : undefined,
           raw: result,
         };
       }

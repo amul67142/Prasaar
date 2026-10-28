@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 process.env.YOUTUBE_CLIENT_ID ??= "test-client";
 process.env.YOUTUBE_CLIENT_SECRET ??= "test-secret";
 const { youtubeAdapter } = await import("@/lib/platforms/youtube");
-const { youtubeTitle, validatePost } = await import("@/lib/platforms/rules");
+const { youtubeTitle, validatePost, parseYouTubeTags, youtubeTagsLength } = await import("@/lib/platforms/rules");
 
 const ok = (msg: string) => console.log(`✓ ${msg}`);
 const MB = 1024 * 1024;
@@ -20,12 +20,15 @@ interface Sim {
   truncateFirstChunk?: number;
   initStatus?: number;
   initBody?: unknown;
+  thumbnailStatus?: number;
 }
 
 function simulate(sim: Sim) {
   const received = Buffer.alloc(file.length);
   let receivedBytes = 0;
   let initBody: Record<string, unknown> | undefined;
+  let initUrl = "";
+  let thumb: { videoId: string; type: string; bytes: number } | undefined;
   const ranges: string[] = [];
   let first = true;
   globalThis.fetch = (async (input: string | URL | Request, init: RequestInit = {}) => {
@@ -37,6 +40,7 @@ function simulate(sim: Sim) {
       assert.equal(headers.get("x-upload-content-length"), String(file.length));
       if (sim.initStatus) return Response.json(sim.initBody ?? {}, { status: sim.initStatus });
       initBody = JSON.parse(String(init.body));
+      initUrl = url;
       return new Response(null, { status: 200, headers: { Location: "https://upload.example/session/1" } });
     }
     if (url === "https://upload.example/session/1") {
@@ -53,6 +57,13 @@ function simulate(sim: Sim) {
       if (receivedBytes === file.length) return Response.json({ id: "vid123" }, { status: 200 });
       return new Response(null, { status: 308, headers: { Range: `bytes=0-${receivedBytes - 1}` } });
     }
+    if (url.startsWith("https://www.googleapis.com/upload/youtube/v3/thumbnails/set")) {
+      if (sim.thumbnailStatus) return Response.json({ error: { errors: [{ reason: "forbidden" }] } }, { status: sim.thumbnailStatus });
+      const body = init.body as Blob;
+      thumb = { videoId: new URL(url).searchParams.get("videoId")!, type: headers.get("content-type")!, bytes: body.size };
+      return Response.json({ items: [] });
+    }
+    if (url === "https://cdn.example/media/thumb.jpg") return new Response(Buffer.alloc(50_000), { status: 200 });
     if (url === "https://cdn.example/media/v.mp4") {
       const r = headers.get("range");
       if (sim.rangeSupport && r) {
@@ -63,7 +74,7 @@ function simulate(sim: Sim) {
     }
     throw new Error(`unexpected fetch ${url}`);
   }) as typeof fetch;
-  return { received, ranges, initBody: () => initBody };
+  return { received, ranges, initBody: () => initBody, initUrl: () => initUrl, thumb: () => thumb };
 }
 
 const channel = {
@@ -74,11 +85,12 @@ const channel = {
   credentials: { refreshToken: "r", accessToken: "stale", accessTokenExpiresAt: new Date(Date.now() - 1000).toISOString() },
   meta: { channelId: "UC1" },
 };
+const thumbnail = { url: "https://cdn.example/media/thumb.jpg", mime: "image/jpeg", kind: "image" as const, sizeBytes: 50_000, filename: "t.jpg" };
 const media = [{ url: "https://cdn.example/media/v.mp4", mime: "video/mp4", kind: "video" as const, sizeBytes: file.length, filename: "launch.mp4" }];
 
 for (const rangeSupport of [true, false]) {
   const s = simulate({ rangeSupport });
-  const res = await youtubeAdapter.publish(channel, { text: "Launch day!\nMore below", media, format: "feed", privacy: "unlisted" });
+  const res = await youtubeAdapter.publish(channel, { text: "Launch day!\nMore below", media, format: "feed", youtube: { privacy: "unlisted" } });
   assert.equal(res.platformPostId, "vid123");
   assert.equal(res.permalink, "https://www.youtube.com/watch?v=vid123");
   assert.ok(s.received.equals(file), "YouTube received different bytes");
@@ -92,11 +104,55 @@ for (const rangeSupport of [true, false]) {
 
 {
   const s = simulate({ rangeSupport: true, truncateFirstChunk: 5 * MB });
-  const res = await youtubeAdapter.publish(channel, { text: "x", title: "My title", media, format: "reel" });
+  const res = await youtubeAdapter.publish(channel, { text: "x", youtube: { title: "My title" }, media, format: "reel", thumbnail });
   assert.ok(s.received.equals(file));
   assert.equal(res.permalink, "https://www.youtube.com/shorts/vid123");
   assert.equal((s.initBody() as { snippet: { title: string } }).snippet.title, "My title");
-  ok(`resumes from YouTube's Range after a partial chunk (${s.ranges.length} requests); Short permalink`);
+  assert.equal(s.thumb(), undefined, "Shorts must not get a thumbnail call");
+  ok(`resumes from YouTube's Range after a partial chunk (${s.ranges.length} requests); Short permalink, no thumbnail call`);
+}
+
+{
+  const s = simulate({ rangeSupport: true });
+  const res = await youtubeAdapter.publish(channel, {
+    text: "Demo",
+    media,
+    format: "feed",
+    thumbnail,
+    youtube: { tags: ["ai video", "ugc"], categoryId: "28", aiContent: true, paidPromotion: true, notifySubscribers: false, embeddable: false, madeForKids: true },
+  });
+  const body = s.initBody() as {
+    snippet: { tags: string[]; categoryId: string };
+    status: { containsSyntheticMedia?: boolean; embeddable: boolean; selfDeclaredMadeForKids: boolean };
+    paidProductPlacementDetails?: { hasPaidProductPlacement: boolean };
+  };
+  const q = new URL(s.initUrl()).searchParams;
+  assert.deepEqual(body.snippet.tags, ["ai video", "ugc"]);
+  assert.equal(body.snippet.categoryId, "28");
+  assert.equal(body.status.containsSyntheticMedia, true);
+  assert.equal(body.status.embeddable, false);
+  assert.equal(body.status.selfDeclaredMadeForKids, true);
+  assert.equal(body.paidProductPlacementDetails?.hasPaidProductPlacement, true);
+  assert.equal(q.get("part"), "snippet,status,paidProductPlacementDetails");
+  assert.equal(q.get("notifySubscribers"), "false");
+  assert.deepEqual(s.thumb(), { videoId: "vid123", type: "image/jpeg", bytes: 50_000 });
+  assert.equal(res.warnings, undefined);
+  ok("tags, category, AI disclosure, paid promotion, notify, embedding and made-for-kids reach YouTube; thumbnail set");
+
+  const d = simulate({ rangeSupport: true });
+  await youtubeAdapter.publish(channel, { text: "Plain", media, format: "feed" });
+  const plain = d.initBody() as { snippet: Record<string, unknown>; status: Record<string, unknown> };
+  assert.equal(plain.snippet.categoryId, "22");
+  assert.equal("tags" in plain.snippet, false);
+  assert.equal("containsSyntheticMedia" in plain.status, false);
+  assert.equal(new URL(d.initUrl()).searchParams.get("part"), "snippet,status");
+  ok("defaults: People & Blogs, no tags, no disclosures, subscribers notified");
+
+  simulate({ rangeSupport: true, thumbnailStatus: 403 });
+  const warned = await youtubeAdapter.publish(channel, { text: "x", media, format: "feed", thumbnail });
+  assert.equal(warned.platformPostId, "vid123");
+  assert.match(warned.warnings?.[0] ?? "", /phone-verified/);
+  ok("a refused thumbnail leaves the video published with a clear warning");
 }
 
 {
@@ -112,6 +168,9 @@ assert.equal(youtubeTitle(undefined, "", "clip.final.mp4"), "clip.final");
 assert.equal(Array.from(youtubeTitle(undefined, "🎉".repeat(150))).length, 100);
 const issues = validatePost({ platform: "youtube", text: "a <b>", media: [], format: "feed" }).map((i) => i.code);
 assert.ok(issues.includes("VIDEO_REQUIRED") && issues.includes("YOUTUBE_ANGLE_BRACKETS"));
+assert.deepEqual(parseYouTubeTags(" a, #b ,A, <c>, "), ["a", "b", "c"]);
+assert.equal(youtubeTagsLength(["a b", "cd"]), 8);
+ok("tags: parsed, deduplicated, counted the way YouTube counts them");
 ok("title falls back to first line / filename, strips < >, caps at 100; video and < > rules");
 
 console.log("\nAll YouTube checks passed.");

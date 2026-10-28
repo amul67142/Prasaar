@@ -71,16 +71,7 @@ export async function publishPost(postId: string): Promise<"published" | "retryi
     const media: AdapterMedia[] = group.mediaIds.map((id) => {
       const m = byId.get(id.toString());
       if (!m || m.status !== "ready") throw new PlatformError("MEDIA_MISSING", "An attached file is missing or still uploading.");
-      return {
-        url: m.url,
-        mime: m.mime,
-        kind: m.kind as AdapterMedia["kind"],
-        sizeBytes: m.sizeBytes,
-        filename: m.filename,
-        width: m.width ?? undefined,
-        height: m.height ?? undefined,
-        durationSec: m.durationSec ?? undefined,
-      };
+      return toAdapterMedia(m);
     });
 
     const platform = channel.platform as Platform;
@@ -91,9 +82,21 @@ export async function publishPost(postId: string): Promise<"published" | "retryi
       media,
       format: o.format ?? "feed",
       firstComment: (o.firstComment ?? group.firstComment) || undefined,
-      title: o.title,
-      privacy: o.privacy,
-      madeForKids: o.madeForKids,
+      youtube:
+        platform === "youtube"
+          ? {
+              title: o.title,
+              privacy: o.privacy,
+              madeForKids: o.madeForKids,
+              tags: o.tags,
+              categoryId: o.categoryId,
+              aiContent: o.aiContent,
+              paidPromotion: o.paidPromotion,
+              notifySubscribers: o.notifySubscribers,
+              embeddable: o.embeddable,
+            }
+          : undefined,
+      thumbnail: platform === "youtube" && o.thumbnailId ? await loadThumbnail(post, o.thumbnailId) : undefined,
     });
 
     await Post.updateOne(
@@ -109,6 +112,7 @@ export async function publishPost(postId: string): Promise<"published" | "retryi
     );
     await log(post, "info", `Published${result.permalink ? `: ${result.permalink}` : "."}`, result.raw);
     if (result.firstComment === "failed") await log(post, "warn", "The post went out, but the first comment couldn't be added.");
+    for (const w of result.warnings ?? []) await log(post, "warn", w);
     const month = new Date().toISOString().slice(0, 7);
     await Usage.updateOne({ workspaceId: post.workspaceId, month }, { $inc: { postsPublished: 1 } }, { upsert: true });
     await refreshGroupStatus(post.postGroupId);
@@ -116,6 +120,27 @@ export async function publishPost(postId: string): Promise<"published" | "retryi
   } catch (err) {
     return handleFailure(post, err);
   }
+}
+
+function toAdapterMedia(m: MediaDoc): AdapterMedia {
+  return {
+    url: m.url,
+    mime: m.mime,
+    kind: m.kind as AdapterMedia["kind"],
+    sizeBytes: m.sizeBytes,
+    filename: m.filename,
+    width: m.width ?? undefined,
+    height: m.height ?? undefined,
+    durationSec: m.durationSec ?? undefined,
+  };
+}
+
+/** The YouTube thumbnail is optional: if it has gone missing, post without it rather than fail. */
+async function loadThumbnail(post: PostDoc, id: string): Promise<AdapterMedia | undefined> {
+  const m = (await Media.findOne({ _id: id, workspaceId: post.workspaceId, status: "ready" }).lean()) as MediaDoc | null;
+  if (m) return toAdapterMedia(m);
+  await log(post, "warn", "The chosen thumbnail no longer exists, so YouTube will pick one.");
+  return undefined;
 }
 
 async function handleFailure(post: PostDoc, err: unknown): Promise<"retrying" | "failed"> {

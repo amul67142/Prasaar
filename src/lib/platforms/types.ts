@@ -1,6 +1,6 @@
 import "server-only";
 import type { Platform } from "./catalog";
-import type { MediaKind, PostFormat, YouTubePrivacy } from "./rules";
+import type { MediaKind, PostFormat, YouTubeOptions } from "./rules";
 
 /** A channel as an adapter sees it: credentials already decrypted. */
 export interface AdapterChannel<Creds = Record<string, unknown>, Meta = Record<string, unknown>> {
@@ -29,16 +29,18 @@ export interface PublishInput {
   media: AdapterMedia[];
   format: PostFormat;
   firstComment?: string;
-  /** YouTube only: video title, privacy and the made-for-kids declaration. */
-  title?: string;
-  privacy?: YouTubePrivacy;
-  madeForKids?: boolean;
+  /** YouTube only: title, visibility, tags and the other video details. */
+  youtube?: YouTubeOptions;
+  /** YouTube only: custom thumbnail image. */
+  thumbnail?: AdapterMedia;
 }
 
 export interface PublishResult {
   platformPostId: string;
   permalink?: string;
   firstComment?: "posted" | "failed";
+  /** Extras that failed after the post itself went out, e.g. a thumbnail YouTube refused. */
+  warnings?: string[];
   raw?: unknown;
 }
 

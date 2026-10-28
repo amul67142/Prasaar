@@ -32,6 +32,7 @@ import { savePostAction } from "./actions";
 import { ChannelPicker } from "./channel-picker";
 import { MediaStrip } from "./media-strip";
 import { Preview } from "./preview";
+import { YouTubeMoreOptions } from "./youtube-options";
 
 type Override = PlatformOverride;
 type Mode = "schedule" | "queue" | "now";
@@ -61,6 +62,7 @@ export function Composer({ channels, timezone, existing, initialAt, canPublish, 
   const [overrides, setOverrides] = useState<Partial<Record<Platform, Override>>>(existing?.perPlatform ?? {});
   const [firstComment, setFirstComment] = useState(existing?.firstComment ?? "");
   const [media, setMedia] = useState<MediaView[]>(existing?.media ?? []);
+  const [ytThumbnail, setYtThumbnail] = useState<MediaView | undefined>(existing?.youtubeThumbnail);
   const [tab, setTab] = useState<"all" | Platform>("all");
   const [mode, setMode] = useState<Mode>("schedule");
   const initial = defaultTime(timezone, existing?.scheduledAt ?? initialAt);
@@ -237,6 +239,13 @@ export function Composer({ channels, timezone, existing, initialAt, canPublish, 
                 <p className="text-xs text-muted-foreground sm:col-span-2">
                   The post text becomes the video description. Without a title, the first line of the text is used.
                 </p>
+                <YouTubeMoreOptions
+                  value={overrides.youtube ?? {}}
+                  onChange={(patch) => setOverride("youtube", patch)}
+                  thumbnail={ytThumbnail}
+                  onThumbnail={setYtThumbnail}
+                  isShort={formatFor("youtube") === "reel"}
+                />
               </div>
             ) : null}
 
