@@ -22,7 +22,8 @@ import { planLimits } from "../plans";
 import { assertCan, type Ctx } from "../session";
 import { PLATFORMS, type Platform } from "../platforms/catalog";
 import { validatePost, type Issue, type PostFormat } from "../platforms/rules";
-import { enqueuePublish } from "../queue";
+import { after } from "next/server";
+import { enqueuePublish, queueEnabled } from "../queue";
 import { addDaysYmd, weekdayOfYmd, ymd, zonedToUtc } from "../time";
 import { loadPostMedia, toMediaView, type MediaView } from "./media";
 
@@ -206,6 +207,18 @@ async function fanOut(group: PostGroupDoc, channels: ChannelDoc[], at: Date) {
       if (messageId) await Post.updateOne({ _id: p._id }, { queueMessageId: messageId });
     }),
   );
+
+  // Without a queue, "publish now" would wait for the next sweep: publish right after the response.
+  if (!queueEnabled() && at.getTime() <= Date.now() + 15_000) {
+    try {
+      after(async () => {
+        const { publishPost } = await import("../engine");
+        for (const p of posts) await publishPost(p._id.toString());
+      });
+    } catch {
+      // Not inside a request (scripts, tests): the sweep publishes instead.
+    }
+  }
 }
 
 export async function savePostGroup(ctx: Ctx, rawInput: PostInput, opts: { id?: string; source?: "dashboard" | "api" | "mcp" } = {}) {
