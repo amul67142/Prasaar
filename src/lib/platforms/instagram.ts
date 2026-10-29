@@ -1,7 +1,16 @@
 import "server-only";
 import { fetchJson, sleep } from "./http";
 import { describeMetaError, graph, type GraphApi } from "./meta-graph";
-import { PlatformError, type AdapterChannel, type AdapterMedia, type PlatformAdapter, type PublishResult, type RefreshResult } from "./types";
+import {
+  PlatformError,
+  type AdapterChannel,
+  type AdapterMedia,
+  type MetricsResult,
+  type PlatformAdapter,
+  type PostMetrics,
+  type PublishResult,
+  type RefreshResult,
+} from "./types";
 
 /**
  * Instagram Login (`accessToken`, graph.instagram.com, 60-day token) is how accounts connect now.
@@ -134,6 +143,49 @@ export const instagramAdapter: PlatformAdapter<InstagramCredentials, InstagramMe
   async check(channel) {
     const a = apiFor(channel);
     await graph("GET", a.api === "instagram" ? "me" : a.ig, a.token, { fields: a.api === "instagram" ? "user_id,username" : "id,username" }, a.api);
+  },
+
+  async metrics(channel, posts): Promise<MetricsResult> {
+    const a = apiFor(channel);
+    const out: MetricsResult = { posts: {} };
+    let insights = true;
+    for (const p of posts) {
+      const basic = await graph<{ like_count?: number; comments_count?: number }>("GET", p.platformPostId, a.token, { fields: "like_count,comments_count" }, a.api);
+      const m: PostMetrics = { likes: basic.like_count, comments: basic.comments_count };
+      // Story insights disappear after 24 hours, so stories keep just the basic counts.
+      if (insights && p.format !== "story") {
+        try {
+          const res = await graph<{ data?: { name: string; values?: { value: number }[]; total_value?: { value: number } }[] }>(
+            "GET",
+            `${p.platformPostId}/insights`,
+            a.token,
+            { metric: "reach,saved,shares,views" },
+            a.api,
+          );
+          for (const d of res.data ?? []) {
+            const v = d.total_value?.value ?? d.values?.[0]?.value;
+            if (typeof v !== "number") continue;
+            if (d.name === "reach") m.reach = v;
+            else if (d.name === "saved") m.saves = v;
+            else if (d.name === "shares") m.shares = v;
+            else if (d.name === "views") m.views = v;
+          }
+        } catch (err) {
+          if (!(err instanceof PlatformError) || err.code !== "PERMISSION_DENIED") throw err;
+          insights = false;
+          out.note = "Reconnect this account to see reach, views, saves and shares.";
+        }
+      }
+      out.posts[p.id] = m;
+    }
+    return out;
+  },
+
+  async followers(channel) {
+    const a = apiFor(channel);
+    const res = await graph<{ followers_count?: number }>("GET", a.api === "instagram" ? "me" : a.ig, a.token, { fields: "followers_count" }, a.api);
+    if (typeof res.followers_count !== "number") throw new PlatformError("NO_FOLLOWERS", "Instagram didn't return a follower count.");
+    return res.followers_count;
   },
 
   /** Instagram Login tokens last 60 days and can be renewed while still valid (and at least a day old). */

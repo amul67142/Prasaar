@@ -3,7 +3,8 @@ import "server-only";
 const sdk = () => import("@atproto/api");
 import { downloadMedia } from "./http";
 import { PLATFORM_RULES } from "./rules";
-import { PlatformError, type AdapterChannel, type PlatformAdapter } from "./types";
+import { fetchJson } from "./http";
+import { PlatformError, type AdapterChannel, type MetricsResult, type PlatformAdapter } from "./types";
 
 export interface BlueskyCredentials {
   identifier: string;
@@ -18,6 +19,14 @@ export interface BlueskyMeta {
 type BskyChannel = AdapterChannel<BlueskyCredentials, BlueskyMeta>;
 
 export const BLUESKY_DEFAULT_SERVICE = "https://bsky.social";
+/** Bluesky's public read API: counts for any post or profile, whichever server hosts the account. */
+const BLUESKY_APPVIEW = "https://public.api.bsky.app";
+
+function describeBlueskyHttpError(status: number) {
+  if (status === 429) return { code: "RATE_LIMITED", message: "Bluesky is rate limiting us; we'll retry.", temporary: true };
+  if (status >= 500) return { code: "PLATFORM_UNAVAILABLE", message: "Couldn't reach Bluesky; we'll retry.", temporary: true };
+  return { code: "PLATFORM_REJECTED", message: `Bluesky couldn't return stats (HTTP ${status}).`, authFailed: false };
+}
 
 /** Maps @atproto XRPC errors onto PlatformError. */
 export function toBlueskyError(err: unknown): PlatformError {
@@ -81,5 +90,35 @@ export const blueskyAdapter: PlatformAdapter<BlueskyCredentials, BlueskyMeta> = 
 
   async check(channel) {
     await blueskyLogin(channel.meta.service || BLUESKY_DEFAULT_SERVICE, channel.credentials.identifier, channel.credentials.appPassword);
+  },
+
+  async metrics(_channel, posts): Promise<MetricsResult> {
+    const out: MetricsResult = { posts: {} };
+    for (let i = 0; i < posts.length; i += 25) {
+      const batch = posts.slice(i, i + 25);
+      const q = new URLSearchParams();
+      for (const p of batch) q.append("uris", p.platformPostId);
+      const res = await fetchJson<{ posts?: { uri: string; likeCount?: number; replyCount?: number; repostCount?: number; quoteCount?: number }[] }>(
+        `${BLUESKY_APPVIEW}/xrpc/app.bsky.feed.getPosts?${q}`,
+        {},
+        describeBlueskyHttpError,
+      );
+      const byUri = new Map((res.posts ?? []).map((p) => [p.uri, p]));
+      for (const p of batch) {
+        const s = byUri.get(p.platformPostId);
+        if (s) out.posts[p.id] = { likes: s.likeCount ?? 0, comments: s.replyCount ?? 0, shares: (s.repostCount ?? 0) + (s.quoteCount ?? 0) };
+      }
+    }
+    return out;
+  },
+
+  async followers(channel) {
+    const res = await fetchJson<{ followersCount?: number }>(
+      `${BLUESKY_APPVIEW}/xrpc/app.bsky.actor.getProfile?actor=${encodeURIComponent(channel.meta.did || channel.externalId)}`,
+      {},
+      describeBlueskyHttpError,
+    );
+    if (typeof res.followersCount !== "number") throw new PlatformError("NO_FOLLOWERS", "Bluesky didn't return a follower count.");
+    return res.followersCount;
   },
 };

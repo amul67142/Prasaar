@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarDays, Clock, Code2, House, Images, LayoutGrid, Link2, Send, type LucideIcon } from "lucide-react";
+import { BarChart3, CalendarDays, Clock, Code2, House, Images, LayoutGrid, Link2, Send, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Item = { href: string; label: string; icon: LucideIcon };
@@ -13,6 +13,7 @@ export const NAV_GROUPS: Item[][] = [
     { href: "/channels", label: "Channels", icon: Link2 },
     { href: "/posts", label: "Posts", icon: Send },
     { href: "/calendar", label: "Calendar", icon: CalendarDays },
+    { href: "/analytics", label: "Analytics", icon: BarChart3 },
   ],
   [
     { href: "/media", label: "Media", icon: Images },

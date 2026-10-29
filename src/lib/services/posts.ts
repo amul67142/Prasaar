@@ -35,6 +35,7 @@ import { after } from "next/server";
 import { enqueuePublish, queueEnabled } from "../queue";
 import { addDaysYmd, weekdayOfYmd, ymd, zonedToUtc } from "../time";
 import { loadPostMedia, toMediaView, type MediaView } from "./media";
+import { METRIC_KEYS, type MetricKey } from "../platforms/analytics-info";
 
 const override = z.object({
   content: z.string().max(70000).optional(),
@@ -88,6 +89,8 @@ export interface PostView {
   attempts: number;
   lastError?: { code?: string; message?: string };
   firstCommentStatus?: string;
+  metrics?: Partial<Record<MetricKey, number>>;
+  metricsAt?: string;
 }
 
 export interface PostGroupView {
@@ -129,6 +132,10 @@ function toPostView(p: PostDoc): PostView {
     attempts: p.attempts ?? 0,
     lastError: p.lastError?.message ? { code: p.lastError.code ?? undefined, message: p.lastError.message } : undefined,
     firstCommentStatus: p.firstCommentStatus ?? undefined,
+    metrics: p.metricsAt
+      ? (Object.fromEntries(METRIC_KEYS.filter((k) => typeof p.metrics?.[k] === "number").map((k) => [k, p.metrics![k]])) as PostView["metrics"])
+      : undefined,
+    metricsAt: p.metricsAt?.toISOString(),
   };
 }
 

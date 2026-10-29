@@ -2,7 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { downloadMedia, fetchJson, platformFetch, sleep } from "./http";
 import { PLATFORM_RULES } from "./rules";
-import { PlatformError, type AdapterChannel, type AdapterMedia, type PlatformAdapter, type PublishResult } from "./types";
+import { PlatformError, type AdapterChannel, type AdapterMedia, type MetricsResult, type PlatformAdapter, type PublishResult } from "./types";
 
 export interface MastodonCredentials {
   accessToken: string;
@@ -82,5 +82,32 @@ export const mastodonAdapter: PlatformAdapter<MastodonCredentials, MastodonMeta>
 
   async check(channel) {
     await fetchJson(`${channel.meta.instance}/api/v1/accounts/verify_credentials`, { headers: auth(channel.credentials.accessToken) }, describeMastodonError);
+  },
+
+  async metrics(channel, posts): Promise<MetricsResult> {
+    const out: MetricsResult = { posts: {} };
+    for (const p of posts) {
+      try {
+        const s = await fetchJson<{ favourites_count: number; reblogs_count: number; replies_count: number }>(
+          `${channel.meta.instance}/api/v1/statuses/${encodeURIComponent(p.platformPostId)}`,
+          { headers: auth(channel.credentials.accessToken) },
+          describeMastodonError,
+        );
+        out.posts[p.id] = { likes: s.favourites_count, comments: s.replies_count, shares: s.reblogs_count };
+      } catch (err) {
+        // A deleted post answers 404; skip it rather than stop the whole channel.
+        if (!(err instanceof PlatformError && err.code === "HTTP_404")) throw err;
+      }
+    }
+    return out;
+  },
+
+  async followers(channel) {
+    const me = await fetchJson<{ followers_count: number }>(
+      `${channel.meta.instance}/api/v1/accounts/verify_credentials`,
+      { headers: auth(channel.credentials.accessToken) },
+      describeMastodonError,
+    );
+    return me.followers_count;
   },
 };

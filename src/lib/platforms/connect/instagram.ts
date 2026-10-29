@@ -8,7 +8,12 @@ import type { ConnectCandidate } from "../types";
 
 // Instagram API with Instagram Login: the user signs in on instagram.com directly, no Facebook Page needed.
 // Works for Business and Creator accounts. App credentials come from the Meta app's Instagram product.
-export const INSTAGRAM_SCOPES = ["instagram_business_basic", "instagram_business_content_publish", "instagram_business_manage_comments"];
+export const INSTAGRAM_SCOPES = [
+  "instagram_business_basic",
+  "instagram_business_content_publish",
+  "instagram_business_manage_comments",
+  "instagram_business_manage_insights",
+];
 
 const redirectUri = () => `${appUrl()}/api/connect/instagram/callback`;
 

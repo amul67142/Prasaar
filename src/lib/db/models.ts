@@ -52,6 +52,8 @@ const workspaceSchema = new Schema(
     parentAgencyId: { type: ObjectId, index: true },
     planId: { type: String, default: "beta" },
     timezone: { type: String, default: "Asia/Kolkata" },
+    /** Last manual "Refresh stats", to keep platform API use in check. */
+    analyticsRefreshedAt: Date,
   },
   { timestamps: true },
 );
@@ -113,12 +115,28 @@ const channelSchema = new Schema(
     connectedBy: ObjectId,
     lastError: String,
     expiryAlertSentAt: Date,
+    /** Latest follower / subscriber count, and why stats may be partial. */
+    followers: Number,
+    analyticsNote: String,
   },
   { timestamps: true, minimize: false },
 );
 channelSchema.index({ workspaceId: 1, platform: 1, externalId: 1 }, { unique: true });
 export type ChannelDoc = InferSchemaType<typeof channelSchema> & { _id: Types.ObjectId };
 export const Channel = model<ChannelDoc>("Channel", channelSchema);
+
+/** One follower count per channel per day (UTC), for growth over time. Written by the analytics collector. */
+const channelStatSchema = new Schema({
+  workspaceId: { type: ObjectId, required: true },
+  channelId: { type: ObjectId, required: true },
+  day: { type: String, required: true },
+  followers: { type: Number, required: true },
+  at: { type: Date, default: Date.now },
+});
+channelStatSchema.index({ channelId: 1, day: 1 }, { unique: true });
+channelStatSchema.index({ workspaceId: 1, day: 1 });
+export type ChannelStatDoc = InferSchemaType<typeof channelStatSchema> & { _id: Types.ObjectId };
+export const ChannelStat = model<ChannelStatDoc>("ChannelStat", channelStatSchema);
 
 // ---------- OAuth handshakes ----------
 const oauthStateSchema = new Schema({
@@ -224,12 +242,23 @@ const postSchema = new Schema(
     publishedAt: Date,
     firstCommentStatus: { type: String, enum: ["none", "posted", "failed"], default: "none" },
     queueMessageId: String,
+    /** Engagement as the platform last reported it; fields it doesn't share stay unset. */
+    metrics: {
+      likes: Number,
+      comments: Number,
+      shares: Number,
+      saves: Number,
+      views: Number,
+      reach: Number,
+    },
+    metricsAt: Date,
   },
   { timestamps: true },
 );
 postSchema.index({ status: 1, scheduledAt: 1 });
 postSchema.index({ status: 1, nextAttemptAt: 1 });
 postSchema.index({ workspaceId: 1, scheduledAt: 1 });
+postSchema.index({ workspaceId: 1, status: 1, publishedAt: -1 });
 export type PostDoc = InferSchemaType<typeof postSchema> & { _id: Types.ObjectId };
 export const Post = model<PostDoc>("Post", postSchema);
 

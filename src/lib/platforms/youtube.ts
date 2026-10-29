@@ -2,7 +2,7 @@ import "server-only";
 import { requireEnv } from "../env";
 import { downloadMedia, fetchJson, platformFetch, sleep } from "./http";
 import { YOUTUBE_THUMBNAIL, youtubeCanUsePlaylists, youtubeTitle } from "./rules";
-import { PlatformError, type AdapterChannel, type AdapterMedia, type PlatformAdapter } from "./types";
+import { PlatformError, type AdapterChannel, type AdapterMedia, type MetricsResult, type PlatformAdapter } from "./types";
 
 export interface YouTubeCredentials {
   refreshToken: string;
@@ -256,5 +256,38 @@ export const youtubeAdapter: PlatformAdapter<YouTubeCredentials, YouTubeMeta> = 
   async check(channel) {
     const token = await youtubeAccessToken(channel.credentials);
     await fetchJson(`${API}/channels?part=id&mine=true`, { headers: { Authorization: `Bearer ${token}` } }, describeYouTubeError);
+  },
+
+  // One request per 50 videos, at 1 quota unit each.
+  async metrics(channel, posts): Promise<MetricsResult> {
+    const token = await youtubeAccessToken(channel.credentials);
+    const out: MetricsResult = { posts: {} };
+    const num = (v?: string) => (v === undefined ? undefined : Number(v));
+    for (let i = 0; i < posts.length; i += 50) {
+      const batch = posts.slice(i, i + 50);
+      const res = await fetchJson<{ items?: { id: string; statistics?: { viewCount?: string; likeCount?: string; commentCount?: string } }[] }>(
+        `${API}/videos?part=statistics&id=${batch.map((p) => encodeURIComponent(p.platformPostId)).join(",")}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+        describeYouTubeError,
+      );
+      const byId = new Map((res.items ?? []).map((v) => [v.id, v.statistics ?? {}]));
+      for (const p of batch) {
+        const s = byId.get(p.platformPostId);
+        if (s) out.posts[p.id] = { views: num(s.viewCount), likes: num(s.likeCount), comments: num(s.commentCount) };
+      }
+    }
+    return out;
+  },
+
+  async followers(channel) {
+    const token = await youtubeAccessToken(channel.credentials);
+    const res = await fetchJson<{ items?: { statistics?: { subscriberCount?: string; hiddenSubscriberCount?: boolean } }[] }>(
+      `${API}/channels?part=statistics&mine=true`,
+      { headers: { Authorization: `Bearer ${token}` } },
+      describeYouTubeError,
+    );
+    const s = res.items?.[0]?.statistics;
+    if (!s || s.hiddenSubscriberCount || s.subscriberCount === undefined) throw new PlatformError("NO_FOLLOWERS", "This channel hides its subscriber count.");
+    return Number(s.subscriberCount);
   },
 };

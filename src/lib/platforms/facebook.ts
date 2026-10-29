@@ -1,7 +1,7 @@
 import "server-only";
 import { config } from "../env";
 import { graph, metaRawPost } from "./meta-graph";
-import { PlatformError, type AdapterChannel, type PlatformAdapter, type PublishResult } from "./types";
+import { PlatformError, type AdapterChannel, type MetricsResult, type PlatformAdapter, type PublishResult } from "./types";
 
 export interface FacebookCredentials {
   pageAccessToken: string;
@@ -88,5 +88,35 @@ export const facebookAdapter: PlatformAdapter<FacebookCredentials, FacebookMeta>
 
   async check(channel) {
     await graph("GET", channel.meta.pageId || channel.externalId, channel.credentials.pageAccessToken, { fields: "id,name" });
+  },
+
+  async metrics(channel, posts): Promise<MetricsResult> {
+    const token = channel.credentials.pageAccessToken;
+    const out: MetricsResult = { posts: {} };
+    type Count = { summary?: { total_count?: number } };
+    for (const p of posts) {
+      // Reels are video objects, which count likes rather than reactions and have no share count.
+      const reel = p.format === "reel";
+      const res = await graph<{ reactions?: Count; likes?: Count; comments?: Count; shares?: { count?: number } }>("GET", p.platformPostId, token, {
+        fields: reel
+          ? "likes.summary(total_count).limit(0),comments.summary(total_count).limit(0)"
+          : "reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0),shares",
+      });
+      out.posts[p.id] = {
+        likes: (reel ? res.likes : res.reactions)?.summary?.total_count,
+        comments: res.comments?.summary?.total_count,
+        shares: reel ? undefined : (res.shares?.count ?? 0),
+      };
+    }
+    return out;
+  },
+
+  async followers(channel) {
+    const res = await graph<{ followers_count?: number; fan_count?: number }>("GET", channel.meta.pageId || channel.externalId, channel.credentials.pageAccessToken, {
+      fields: "followers_count,fan_count",
+    });
+    const n = res.followers_count ?? res.fan_count;
+    if (typeof n !== "number") throw new PlatformError("NO_FOLLOWERS", "Facebook didn't return a follower count.");
+    return n;
   },
 };

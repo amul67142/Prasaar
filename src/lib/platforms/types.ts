@@ -44,6 +44,29 @@ export interface PublishResult {
   raw?: unknown;
 }
 
+/** Engagement for one published post. Platforms that don't share a number leave it out. */
+export interface PostMetrics {
+  likes?: number;
+  comments?: number;
+  shares?: number;
+  saves?: number;
+  views?: number;
+  reach?: number;
+}
+
+export interface MetricsTarget {
+  /** Our Post id, used to key the results. */
+  id: string;
+  platformPostId: string;
+  format: PostFormat;
+}
+
+export interface MetricsResult {
+  posts: Record<string, PostMetrics>;
+  /** Shown on the Analytics page when some numbers couldn't be read, e.g. a missing permission. */
+  note?: string;
+}
+
 export interface RefreshResult<Creds = Record<string, unknown>> {
   credentials: Creds;
   tokenExpiresAt?: Date;
@@ -57,6 +80,10 @@ export interface PlatformAdapter<Creds = Record<string, unknown>, Meta = Record<
   check(channel: AdapterChannel<Creds, Meta>): Promise<void>;
   /** Present for platforms whose tokens expire and can be refreshed. */
   refresh?(channel: AdapterChannel<Creds, Meta>): Promise<RefreshResult<Creds>>;
+  /** Engagement for published posts, where the platform shares it. */
+  metrics?(channel: AdapterChannel<Creds, Meta>, posts: MetricsTarget[]): Promise<MetricsResult>;
+  /** Current follower / subscriber count. */
+  followers?(channel: AdapterChannel<Creds, Meta>): Promise<number>;
 }
 
 /**

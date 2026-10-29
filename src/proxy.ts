@@ -16,6 +16,7 @@ export const config = {
   matcher: [
     "/home/:path*",
     "/calendar/:path*",
+    "/analytics/:path*",
     "/api-keys/:path*",
     "/mcp/:path*",
     "/compose/:path*",

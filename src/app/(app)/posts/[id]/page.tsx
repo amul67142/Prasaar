@@ -13,6 +13,7 @@ import { requireCtx } from "@/lib/session";
 import { listChannels } from "@/lib/services/channels";
 import { getPostGroup, getPostLogs } from "@/lib/services/posts";
 import { formatInTz } from "@/lib/time";
+import { METRIC_KEYS, METRIC_LABELS } from "@/lib/platforms/analytics-info";
 import { MediaThumb } from "../../compose/media-strip";
 import { PostActions, RetryButton } from "./post-actions";
 
@@ -72,6 +73,15 @@ async function Detail({ params }: { params: PageProps<"/posts/[id]">["params"] }
                       {"lastError" in p && p.lastError?.message ? <p className="mt-1 text-sm text-destructive">{p.lastError.message}</p> : null}
                       {"firstCommentStatus" in p && p.firstCommentStatus === "failed" ? (
                         <p className="mt-1 text-xs text-amber-700">The first comment couldn&apos;t be added.</p>
+                      ) : null}
+                      {"metrics" in p && p.metrics && Object.keys(p.metrics).length ? (
+                        <p className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground" title={p.metricsAt ? `Read ${fmt(p.metricsAt)}` : undefined}>
+                          {METRIC_KEYS.filter((k) => p.metrics![k] != null).map((k) => (
+                            <span key={k}>
+                              <span className="font-medium text-foreground tabular-nums">{p.metrics![k]!.toLocaleString("en-IN")}</span> {METRIC_LABELS[k].toLowerCase()}
+                            </span>
+                          ))}
+                        </p>
                       ) : null}
                     </div>
                     <div className="flex items-center gap-2">

@@ -100,6 +100,12 @@ export const telegramAdapter: PlatformAdapter<TelegramCredentials, TelegramMeta>
   async check(channel) {
     await assertBotCanPost(channel.credentials.botToken, channel.meta.chatId || channel.externalId);
   },
+
+  async followers(channel) {
+    const count = await tg<number>(channel.credentials.botToken, "getChatMemberCount", { chat_id: channel.meta.chatId || channel.externalId });
+    // Bots count themselves as members.
+    return Math.max(0, count - 1);
+  },
 };
 
 /** Confirms the bot is in the chat with rights to post. Returns what we learned. */
