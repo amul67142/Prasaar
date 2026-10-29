@@ -150,7 +150,14 @@ export const instagramAdapter: PlatformAdapter<InstagramCredentials, InstagramMe
     const out: MetricsResult = { posts: {} };
     let insights = true;
     for (const p of posts) {
-      const basic = await graph<{ like_count?: number; comments_count?: number }>("GET", p.platformPostId, a.token, { fields: "like_count,comments_count" }, a.api);
+      let basic: { like_count?: number; comments_count?: number };
+      try {
+        basic = await graph("GET", p.platformPostId, a.token, { fields: "like_count,comments_count" }, a.api);
+      } catch (err) {
+        // Deleted on Instagram: leave it out and carry on with the rest.
+        if (err instanceof PlatformError && err.code === "NOT_FOUND") continue;
+        throw err;
+      }
       const m: PostMetrics = { likes: basic.like_count, comments: basic.comments_count };
       // Story insights disappear after 24 hours, so stories keep just the basic counts.
       if (insights && p.format !== "story") {

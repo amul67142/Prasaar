@@ -97,11 +97,18 @@ export const facebookAdapter: PlatformAdapter<FacebookCredentials, FacebookMeta>
     for (const p of posts) {
       // Reels are video objects, which count likes rather than reactions and have no share count.
       const reel = p.format === "reel";
-      const res = await graph<{ reactions?: Count; likes?: Count; comments?: Count; shares?: { count?: number } }>("GET", p.platformPostId, token, {
-        fields: reel
-          ? "likes.summary(total_count).limit(0),comments.summary(total_count).limit(0)"
-          : "reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0),shares",
-      });
+      let res: { reactions?: Count; likes?: Count; comments?: Count; shares?: { count?: number } };
+      try {
+        res = await graph("GET", p.platformPostId, token, {
+          fields: reel
+            ? "likes.summary(total_count).limit(0),comments.summary(total_count).limit(0)"
+            : "reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0),shares",
+        });
+      } catch (err) {
+        // Deleted on Facebook: leave it out and carry on with the rest.
+        if (err instanceof PlatformError && err.code === "NOT_FOUND") continue;
+        throw err;
+      }
       out.posts[p.id] = {
         likes: (reel ? res.likes : res.reactions)?.summary?.total_count,
         comments: res.comments?.summary?.total_count,

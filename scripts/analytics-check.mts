@@ -29,6 +29,9 @@ const ch = <C, M>(platform: string, credentials: C, meta: M) => ({ id: "c1", pla
   handler = (url) => {
     calls.push(url.pathname);
     if (url.pathname.endsWith("/m1") || url.pathname.endsWith("/m2")) return json({ like_count: 10, comments_count: 3 });
+    if (url.pathname.endsWith("/deleted")) {
+      return json({ error: { message: "Unsupported get request. Object with ID 'deleted' does not exist", type: "IGApiException", code: 100, error_subcode: 33 } }, 400);
+    }
     if (url.pathname.endsWith("/insights")) {
       if (!insightsAllowed) return json({ error: { code: 10, message: "Application does not have permission" } }, 400);
       assert.equal(url.searchParams.get("metric"), "reach,saved,shares,views");
@@ -39,9 +42,11 @@ const ch = <C, M>(platform: string, credentials: C, meta: M) => ({ id: "c1", pla
   const ig = getAdapter("instagram");
   const channel = ch("instagram", { accessToken: "t" }, { igUserId: "ig1", userId: "u" });
   let r = await ig.metrics!(channel, [
+    { id: "p0", platformPostId: "deleted", format: "feed" },
     { id: "p1", platformPostId: "m1", format: "feed" },
     { id: "p2", platformPostId: "m2", format: "story" },
   ]);
+  assert.equal(r.posts.p0, undefined, "a post deleted on Instagram is skipped, not fatal");
   assert.deepEqual(r.posts.p1, { likes: 10, comments: 3, reach: 400, saves: 7, shares: 2, views: 900 });
   assert.deepEqual(r.posts.p2, { likes: 10, comments: 3 });
   assert.equal(calls.filter((c) => c.endsWith("/insights")).length, 1, "stories must not ask for insights");
@@ -58,7 +63,7 @@ const ch = <C, M>(platform: string, credentials: C, meta: M) => ({ id: "c1", pla
   assert.deepEqual(r.posts.p3, { likes: 10, comments: 3 });
   assert.equal(calls.filter((c) => c.endsWith("/insights")).length, 1, "stop asking once the permission is known to be missing");
   assert.match(r.note ?? "", /Reconnect/);
-  ok("Instagram: likes, comments, reach, saves, shares, views; stories skip insights; missing permission keeps basic counts and says reconnect");
+  ok("Instagram: deleted posts skipped; likes, comments, reach, saves, shares, views; stories skip insights; missing permission keeps basic counts and says reconnect");
 }
 
 // ---------- Facebook: reactions for posts, likes for reels ----------
@@ -70,6 +75,7 @@ const ch = <C, M>(platform: string, credentials: C, meta: M) => ({ id: "c1", pla
       return json({ reactions: { summary: { total_count: 25 } }, comments: { summary: { total_count: 4 } }, shares: { count: 6 } });
     }
     if (url.pathname.endsWith("/post2")) return json({ reactions: { summary: { total_count: 1 } }, comments: { summary: { total_count: 0 } } });
+    if (url.pathname.endsWith("/gone")) return json({ error: { message: "does not exist", code: 100, error_subcode: 33 } }, 400);
     if (url.pathname.endsWith("/reel1")) {
       assert.match(fields, /^likes\.summary/);
       return json({ likes: { summary: { total_count: 50 } }, comments: { summary: { total_count: 5 } } });
@@ -82,12 +88,14 @@ const ch = <C, M>(platform: string, credentials: C, meta: M) => ({ id: "c1", pla
     { id: "a", platformPostId: "post1", format: "feed" },
     { id: "b", platformPostId: "post2", format: "feed" },
     { id: "c", platformPostId: "reel1", format: "reel" },
+    { id: "d", platformPostId: "gone", format: "feed" },
   ]);
+  assert.equal(r.posts.d, undefined);
   assert.deepEqual(r.posts.a, { likes: 25, comments: 4, shares: 6 });
   assert.deepEqual(r.posts.b, { likes: 1, comments: 0, shares: 0 });
   assert.deepEqual(r.posts.c, { likes: 50, comments: 5, shares: undefined });
   assert.equal(await fb.followers!(channel), 999);
-  ok("Facebook: reactions, comments and shares for posts; likes and comments for reels; followers");
+  ok("Facebook: reactions, comments and shares for posts; likes and comments for reels; deleted posts skipped; followers");
 }
 
 // ---------- YouTube: batched statistics, hidden subscriber counts ----------

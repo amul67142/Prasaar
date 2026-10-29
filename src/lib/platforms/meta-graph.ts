@@ -31,6 +31,8 @@ export function describeMetaError(status: number, body: unknown) {
   if (code === 10 || (code >= 200 && code < 300)) {
     return { code: "PERMISSION_DENIED", message: `Meta refused: missing permission. Reconnect the account and allow every requested permission. (${detail})`, temporary: false, authFailed: false };
   }
+  // Usually the post or media was deleted on the platform.
+  if (code === 100 && e.error_subcode === 33) return { code: "NOT_FOUND", message: `Meta can't find this item; it may have been deleted. (${detail})`, temporary: false, authFailed: false };
   if (code === 368) return { code: "BLOCKED_BY_PLATFORM", message: `Meta blocked this post for violating its policies. (${detail})`, temporary: false, authFailed: false };
   if (code === 9007 || e.error_subcode === 2207027) return { code: "MEDIA_PROCESSING", message: "Instagram is still processing the media; we'll retry.", temporary: true, authFailed: false };
   if (e.is_transient || code === 1 || code === 2 || status >= 500) return { code: "PLATFORM_UNAVAILABLE", message: `Meta had a temporary problem; we'll retry. (${detail})`, temporary: true, authFailed: false };
