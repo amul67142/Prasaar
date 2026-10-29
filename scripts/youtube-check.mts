@@ -21,6 +21,8 @@ interface Sim {
   initStatus?: number;
   initBody?: unknown;
   thumbnailStatus?: number;
+  /** Answer 404 this many times before accepting, like a video YouTube hasn't indexed yet. */
+  playlistNotFoundTimes?: number;
 }
 
 function simulate(sim: Sim) {
@@ -29,6 +31,8 @@ function simulate(sim: Sim) {
   let initBody: Record<string, unknown> | undefined;
   let initUrl = "";
   let thumb: { videoId: string; type: string; bytes: number } | undefined;
+  const playlistAdds: { playlistId: string; videoId: string }[] = [];
+  let playlistFailuresLeft = sim.playlistNotFoundTimes ?? 0;
   const ranges: string[] = [];
   let first = true;
   globalThis.fetch = (async (input: string | URL | Request, init: RequestInit = {}) => {
@@ -63,6 +67,12 @@ function simulate(sim: Sim) {
       thumb = { videoId: new URL(url).searchParams.get("videoId")!, type: headers.get("content-type")!, bytes: body.size };
       return Response.json({ items: [] });
     }
+    if (url === "https://www.googleapis.com/youtube/v3/playlistItems?part=snippet") {
+      if (playlistFailuresLeft-- > 0) return Response.json({ error: { errors: [{ reason: "videoNotFound" }] } }, { status: 404 });
+      const b = JSON.parse(String(init.body)) as { snippet: { playlistId: string; resourceId: { videoId: string } } };
+      playlistAdds.push({ playlistId: b.snippet.playlistId, videoId: b.snippet.resourceId.videoId });
+      return Response.json({ id: "item1" });
+    }
     if (url === "https://cdn.example/media/thumb.jpg") return new Response(Buffer.alloc(50_000), { status: 200 });
     if (url === "https://cdn.example/media/v.mp4") {
       const r = headers.get("range");
@@ -74,7 +84,7 @@ function simulate(sim: Sim) {
     }
     throw new Error(`unexpected fetch ${url}`);
   }) as typeof fetch;
-  return { received, ranges, initBody: () => initBody, initUrl: () => initUrl, thumb: () => thumb };
+  return { received, ranges, initBody: () => initBody, initUrl: () => initUrl, thumb: () => thumb, playlistAdds };
 }
 
 const channel = {
@@ -172,5 +182,25 @@ assert.deepEqual(parseYouTubeTags(" a, #b ,A, <c>, "), ["a", "b", "c"]);
 assert.equal(youtubeTagsLength(["a b", "cd"]), 8);
 ok("tags: parsed, deduplicated, counted the way YouTube counts them");
 ok("title falls back to first line / filename, strips < >, caps at 100; video and < > rules");
+
+{
+  const withScope = { ...channel, meta: { channelId: "UC1", scopes: ["https://www.googleapis.com/auth/youtube"] } };
+  const pl = { playlistId: "PL123", playlistChannelId: "UC1" };
+  let s = simulate({ rangeSupport: true, playlistNotFoundTimes: 1 });
+  let res = await youtubeAdapter.publish(withScope, { text: "x", media, format: "feed", youtube: pl });
+  assert.deepEqual(s.playlistAdds, [{ playlistId: "PL123", videoId: "vid123" }]);
+  assert.equal(res.warnings, undefined);
+  ok("adds the video to the chosen playlist, retrying while YouTube catches up");
+
+  s = simulate({ rangeSupport: true });
+  res = await youtubeAdapter.publish({ ...withScope, externalId: "UC-other" }, { text: "x", media, format: "feed", youtube: pl });
+  assert.equal(s.playlistAdds.length, 0);
+  assert.equal(res.warnings, undefined);
+  s = simulate({ rangeSupport: true });
+  res = await youtubeAdapter.publish(channel, { text: "x", media, format: "feed", youtube: pl });
+  assert.equal(s.playlistAdds.length, 0);
+  assert.match(res.warnings?.[0] ?? "", /Reconnect/);
+  ok("skips another channel's playlist; asks to reconnect when playlist permission is missing");
+}
 
 console.log("\nAll YouTube checks passed.");

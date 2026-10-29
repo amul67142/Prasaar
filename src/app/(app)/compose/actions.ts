@@ -3,6 +3,7 @@
 import { refresh } from "next/cache";
 import { toActionResult } from "@/lib/errors";
 import { requireCtx } from "@/lib/session";
+import { youtubePlaylists } from "@/lib/services/channels";
 import { deletePostGroup, retryPost, savePostGroup, type PostInput } from "@/lib/services/posts";
 
 export async function savePostAction(input: PostInput, id?: string) {
@@ -23,4 +24,9 @@ export async function retryPostAction(postId: string) {
   const res = await toActionResult(() => retryPost(ctx, postId));
   if (res.ok) refresh();
   return res;
+}
+
+export async function youtubePlaylistsAction(channelId: string) {
+  const ctx = await requireCtx();
+  return toActionResult(() => youtubePlaylists(ctx, channelId));
 }

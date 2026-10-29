@@ -3,13 +3,15 @@ import { appUrl, requireEnv } from "../../env";
 import { AppError } from "../../errors";
 import { fetchJson } from "../http";
 import { describeYouTubeError, type YouTubeCredentials, type YouTubeMeta } from "../youtube";
+import { YOUTUBE_MANAGE_SCOPE } from "../rules";
 import type { ConnectCandidate } from "../types";
 
 // Google OAuth for the YouTube Data API. Each login picks one channel (a personal or Brand
 // Account), so the callback adds it straight away.
 const redirectUri = () => `${appUrl()}/api/connect/youtube/callback`;
 const UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.upload";
-const SCOPES = [UPLOAD_SCOPE, "https://www.googleapis.com/auth/youtube.readonly"];
+// readonly lists the channel even if someone unticks "manage", which only playlists need.
+const SCOPES = [UPLOAD_SCOPE, "https://www.googleapis.com/auth/youtube.readonly", YOUTUBE_MANAGE_SCOPE];
 
 export function youtubeAuthorizeUrl(state: string): string {
   const params = new URLSearchParams({
@@ -77,6 +79,6 @@ export async function youtubeCandidate(code: string): Promise<ConnectCandidate> 
       accessToken: token.access_token,
       accessTokenExpiresAt: new Date(Date.now() + token.expires_in * 1000).toISOString(),
     } satisfies YouTubeCredentials,
-    meta: { channelId: channel.id, customUrl: channel.snippet.customUrl } satisfies YouTubeMeta,
+    meta: { channelId: channel.id, customUrl: channel.snippet.customUrl, scopes: token.scope?.split(" ") ?? [] } satisfies YouTubeMeta,
   };
 }

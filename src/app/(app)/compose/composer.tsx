@@ -6,7 +6,6 @@ import { AlertTriangle, CircleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,11 +18,8 @@ import {
   formatLabel,
   PLATFORM_RULES,
   validatePost,
-  youtubeTitle,
-  YOUTUBE_TITLE_MAX,
   type Issue,
   type PostFormat,
-  type YouTubePrivacy,
 } from "@/lib/platforms/rules";
 import type { ChannelView } from "@/lib/services/channels";
 import type { MediaView } from "@/lib/services/media";
@@ -32,7 +28,7 @@ import { savePostAction } from "./actions";
 import { ChannelPicker } from "./channel-picker";
 import { MediaStrip } from "./media-strip";
 import { Preview } from "./preview";
-import { YouTubeMoreOptions } from "./youtube-options";
+import { YouTubeSettings } from "./youtube-settings";
 
 type Override = PlatformOverride;
 type Mode = "schedule" | "queue" | "now";
@@ -186,7 +182,7 @@ export function Composer({ channels, timezone, existing, initialAt, canPublish, 
                   />
                   Custom text for {PLATFORM_INFO[activeTab].label}
                 </label>
-                {rulesFor?.formats ? (
+                {rulesFor?.formats && activeTab !== "youtube" ? (
                   <select
                     className="h-8 rounded-lg border bg-background px-2 text-sm"
                     value={formatFor(activeTab)}
@@ -200,52 +196,6 @@ export function Composer({ channels, timezone, existing, initialAt, canPublish, 
                     ))}
                   </select>
                 ) : null}
-              </div>
-            ) : null}
-
-            {activeTab === "youtube" ? (
-              <div className="grid gap-3 rounded-lg bg-muted/40 p-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-                <div className="space-y-1">
-                  <Label htmlFor="yt-title" className="text-xs">
-                    Video title
-                  </Label>
-                  <Input
-                    id="yt-title"
-                    value={overrides.youtube?.title ?? ""}
-                    maxLength={YOUTUBE_TITLE_MAX}
-                    onChange={(e) => setOverride("youtube", { title: e.target.value || undefined })}
-                    placeholder={youtubeTitle(undefined, textFor("youtube"), media.find((m) => m.kind === "video")?.filename)}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="yt-privacy" className="text-xs">
-                    Visibility
-                  </Label>
-                  <select
-                    id="yt-privacy"
-                    className="h-9 rounded-lg border bg-background px-2 text-sm"
-                    value={overrides.youtube?.privacy ?? "public"}
-                    onChange={(e) => setOverride("youtube", { privacy: e.target.value as YouTubePrivacy })}
-                  >
-                    <option value="public">Public</option>
-                    <option value="unlisted">Unlisted</option>
-                    <option value="private">Private</option>
-                  </select>
-                </div>
-                <label className="flex items-center gap-2 text-sm sm:col-span-2">
-                  <Switch checked={overrides.youtube?.madeForKids ?? false} onCheckedChange={(on) => setOverride("youtube", { madeForKids: on || undefined })} />
-                  Made for kids <span className="text-xs text-muted-foreground">(YouTube requires you to say)</span>
-                </label>
-                <p className="text-xs text-muted-foreground sm:col-span-2">
-                  The post text becomes the video description. Without a title, the first line of the text is used.
-                </p>
-                <YouTubeMoreOptions
-                  value={overrides.youtube ?? {}}
-                  onChange={(patch) => setOverride("youtube", patch)}
-                  thumbnail={ytThumbnail}
-                  onThumbnail={setYtThumbnail}
-                  isShort={formatFor("youtube") === "reel"}
-                />
               </div>
             ) : null}
 
@@ -270,6 +220,20 @@ export function Composer({ channels, timezone, existing, initialAt, canPublish, 
             <MediaStrip media={media} onChange={setMedia} />
           </div>
         </section>
+
+        {platforms.includes("youtube") ? (
+          <YouTubeSettings
+            value={overrides.youtube ?? {}}
+            onChange={(patch) => setOverride("youtube", patch)}
+            format={formatFor("youtube")}
+            onFormat={(f) => setOverride("youtube", { format: f })}
+            channels={chosen.filter((c) => c.platform === "youtube")}
+            text={textFor("youtube")}
+            videoFilename={media.find((m) => m.kind === "video")?.filename}
+            thumbnail={ytThumbnail}
+            onThumbnail={setYtThumbnail}
+          />
+        ) : null}
 
         {platforms.some((p) => PLATFORM_RULES[p].firstComment) ? (
           <section className="space-y-1.5">

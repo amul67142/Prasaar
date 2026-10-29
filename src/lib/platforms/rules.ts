@@ -181,6 +181,12 @@ export function parseYouTubeTags(input: string): string[] {
     .filter((t) => t && !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase()));
 }
 
+/** Adding to playlists needs YouTube's broader "manage" permission; channels connected before it was asked for lack it. */
+export const YOUTUBE_MANAGE_SCOPE = "https://www.googleapis.com/auth/youtube";
+export function youtubeCanUsePlaylists(meta: { scopes?: unknown }): boolean {
+  return Array.isArray(meta.scopes) && meta.scopes.includes(YOUTUBE_MANAGE_SCOPE);
+}
+
 /** Custom thumbnails: JPEG or PNG up to 2 MB. Not settable on Shorts through the API. */
 export const YOUTUBE_THUMBNAIL = { mimes: ["image/jpeg", "image/png"], maxBytes: 2 * MB } as const;
 
@@ -196,6 +202,9 @@ export interface YouTubeOptions {
   paidPromotion?: boolean;
   notifySubscribers?: boolean;
   embeddable?: boolean;
+  /** Added after upload, only on the channel the playlist belongs to. */
+  playlistId?: string;
+  playlistChannelId?: string;
 }
 
 export interface MediaInfo {

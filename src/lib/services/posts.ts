@@ -55,6 +55,10 @@ const override = z.object({
   notifySubscribers: z.boolean().optional(),
   embeddable: z.boolean().optional(),
   thumbnailId: z.string().regex(/^[a-f0-9]{24}$/).optional(),
+  playlistId: z.string().regex(/^[A-Za-z0-9_-]{2,64}$/).optional(),
+  /** The YouTube channel the playlist belongs to, and its title for showing it again when editing. */
+  playlistChannelId: z.string().max(64).optional(),
+  playlistTitle: z.string().max(200).optional(),
 });
 export type PlatformOverride = z.infer<typeof override>;
 

@@ -86,6 +86,25 @@ const PREVIEW: { day: number; items: { time: string; text: string; platforms: Pl
   { day: 12, items: [{ time: "10:00", text: "Client story", platforms: ["linkedin", "bluesky"] }] },
 ];
 
+// Drawn rather than the 🇮🇳 emoji, which Windows shows as the letters "IN".
+function IndianFlag({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 30 20" className={className} role="img" aria-label="Indian flag">
+      <rect width="30" height="20" fill="#FFFFFF" />
+      <rect width="30" height="6.67" fill="#FF9933" />
+      <rect y="13.33" width="30" height="6.67" fill="#138808" />
+      <g stroke="#000080" fill="none">
+        <circle cx="15" cy="10" r="2.9" strokeWidth="0.55" />
+        {Array.from({ length: 12 }, (_, i) => {
+          const a = (i * Math.PI) / 12;
+          return <line key={i} x1={15 - 2.9 * Math.cos(a)} y1={10 - 2.9 * Math.sin(a)} x2={15 + 2.9 * Math.cos(a)} y2={10 + 2.9 * Math.sin(a)} strokeWidth="0.25" />;
+        })}
+      </g>
+      <circle cx="15" cy="10" r="0.6" fill="#000080" />
+    </svg>
+  );
+}
+
 function ProductPreview() {
   const days = Array.from({ length: 14 }, (_, i) => i + 1);
   return (
@@ -184,8 +203,8 @@ export default function Home() {
         <section className="mx-auto grid max-w-6xl items-center gap-12 px-4 pt-14 pb-20 sm:px-6 sm:pt-20 lg:grid-cols-[1.05fr_1fr]">
           <div>
             <p className="mb-4 inline-flex items-center gap-2 rounded-full border bg-background px-3 py-1 text-sm text-muted-foreground">
-              <span className="size-1.5 rounded-full bg-brand" />
-              Social media scheduling, priced in rupees
+              <IndianFlag className="h-3 w-[18px] rounded-[2px] ring-1 ring-black/10" />
+              Made in India
             </p>
             <h1 className="font-display text-4xl font-extrabold tracking-tight text-balance sm:text-5xl lg:text-[56px] lg:leading-[1.05]">
               Plan a month of posts in an afternoon. Publish everywhere, on time.

@@ -6,7 +6,8 @@ import { AppError, notFound } from "../errors";
 import { planLimits } from "../plans";
 import { assertCan, type Ctx } from "../session";
 import type { Platform } from "../platforms/catalog";
-import type { AdapterChannel, ConnectCandidate } from "../platforms/types";
+import { PlatformError, type AdapterChannel, type ConnectCandidate } from "../platforms/types";
+import { listYouTubePlaylists, type YouTubeCredentials, type YouTubePlaylist } from "../platforms/youtube";
 
 export interface ChannelView {
   id: string;
@@ -240,4 +241,19 @@ export async function confirmPendingConnection(ctx: Ctx, id: string, keys: strin
   const saved = await upsertChannels(ctx, chosen);
   await doc.deleteOne();
   return saved;
+}
+
+/** A connected YouTube channel's playlists, for the composer. */
+export async function youtubePlaylists(ctx: Ctx, channelId: string): Promise<YouTubePlaylist[]> {
+  await db();
+  if (!Types.ObjectId.isValid(channelId)) throw notFound("Channel");
+  const doc = (await Channel.findOne({ _id: channelId, workspaceId: ctx.workspaceId, platform: "youtube" }).lean()) as ChannelDoc | null;
+  if (!doc) throw notFound("Channel");
+  try {
+    return await listYouTubePlaylists(toAdapterChannel<YouTubeCredentials>(doc).credentials);
+  } catch (err) {
+    // Show YouTube's own reason (e.g. "reconnect the channel") instead of a generic error.
+    if (err instanceof PlatformError) throw new AppError(err.code, err.message, 502);
+    throw err;
+  }
 }

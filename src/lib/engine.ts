@@ -94,6 +94,8 @@ export async function publishPost(postId: string): Promise<"published" | "retryi
               paidPromotion: o.paidPromotion,
               notifySubscribers: o.notifySubscribers,
               embeddable: o.embeddable,
+              playlistId: o.playlistId,
+              playlistChannelId: o.playlistChannelId,
             }
           : undefined,
       thumbnail: platform === "youtube" && o.thumbnailId ? await loadThumbnail(post, o.thumbnailId) : undefined,

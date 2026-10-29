@@ -1,7 +1,7 @@
 import "server-only";
 import { requireEnv } from "../env";
-import { downloadMedia, fetchJson, platformFetch } from "./http";
-import { YOUTUBE_THUMBNAIL, youtubeTitle } from "./rules";
+import { downloadMedia, fetchJson, platformFetch, sleep } from "./http";
+import { YOUTUBE_THUMBNAIL, youtubeCanUsePlaylists, youtubeTitle } from "./rules";
 import { PlatformError, type AdapterChannel, type AdapterMedia, type PlatformAdapter } from "./types";
 
 export interface YouTubeCredentials {
@@ -13,6 +13,8 @@ export interface YouTubeCredentials {
 export interface YouTubeMeta {
   channelId: string;
   customUrl?: string;
+  /** What Google granted; people can untick individual permissions. */
+  scopes?: string[];
 }
 
 type YtChannel = AdapterChannel<YouTubeCredentials, YouTubeMeta>;
@@ -120,6 +122,52 @@ async function setThumbnail(token: string, videoId: string, image: AdapterMedia)
   );
 }
 
+/** A freshly uploaded video can briefly be unknown to the playlist API, so retry a little. */
+async function addToPlaylist(token: string, playlistId: string, videoId: string) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await platformFetch(
+        `${API}/playlistItems?part=snippet`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ snippet: { playlistId, resourceId: { kind: "youtube#video", videoId } } }),
+        },
+        (status, body) =>
+          status === 404 ? { code: "PLAYLIST_NOT_FOUND", message: "the playlist or video wasn't found.", temporary: true } : describeYouTubeError(status, body),
+      );
+      return;
+    } catch (err) {
+      if (attempt >= 2 || !(err instanceof PlatformError && err.temporary)) throw err;
+      await sleep(5000 * (attempt + 1));
+    }
+  }
+}
+
+export interface YouTubePlaylist {
+  id: string;
+  title: string;
+}
+
+/** The channel's own playlists, for the composer's picker. */
+export async function listYouTubePlaylists(credentials: YouTubeCredentials): Promise<YouTubePlaylist[]> {
+  const token = await youtubeAccessToken(credentials);
+  const out: YouTubePlaylist[] = [];
+  let pageToken = "";
+  for (let page = 0; page < 4; page++) {
+    const q = new URLSearchParams({ part: "snippet", mine: "true", maxResults: "50", ...(pageToken ? { pageToken } : {}) });
+    const res = await fetchJson<{ items?: { id: string; snippet: { title: string } }[]; nextPageToken?: string }>(
+      `${API}/playlists?${q}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+      describeYouTubeError,
+    );
+    out.push(...(res.items ?? []).map((p) => ({ id: p.id, title: p.snippet.title })));
+    if (!res.nextPageToken) break;
+    pageToken = res.nextPageToken;
+  }
+  return out;
+}
+
 export const youtubeAdapter: PlatformAdapter<YouTubeCredentials, YouTubeMeta> = {
   platform: "youtube",
 
@@ -179,6 +227,18 @@ export const youtubeAdapter: PlatformAdapter<YouTubeCredentials, YouTubeMeta> = 
             await setThumbnail(token, result.id, input.thumbnail);
           } catch (err) {
             warnings.push(`The video is up, but YouTube didn't accept the thumbnail: ${err instanceof Error ? err.message : "unknown error"}`);
+          }
+        }
+        // The playlist belongs to one channel; skip it when this post goes to another.
+        if (o.playlistId && o.playlistChannelId === channel.externalId) {
+          if (!youtubeCanUsePlaylists(channel.meta)) {
+            warnings.push("The video is up, but this channel was connected without playlist permission. Reconnect it to add videos to playlists.");
+          } else {
+            try {
+              await addToPlaylist(token, o.playlistId, result.id);
+            } catch (err) {
+              warnings.push(`The video is up, but it couldn't be added to the playlist: ${err instanceof Error ? err.message : "unknown error"}`);
+            }
           }
         }
         return {
